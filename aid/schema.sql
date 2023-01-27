@@ -5,12 +5,13 @@ CREATE TABLE IF NOT EXISTS aid(
 
 CREATE TABLE IF NOT EXISTS meds(
   id          TEXT PRIMARY KEY,
-  trackname   TEXT, 
   name        TEXT NOT NULL,
-  valid       DATA_TYPE NOT NULL,
+  valid       TIMESTAMP NOT NULL,
   category    TEXT,
   box         TEXT,
   quantity    INTEGER,
   aidid       TEXT,
-  FOREIGN KEY(aidid) REFERENCES aid(id)
+  FOREIGN KEY(aidid) 
+  REFERENCES aid(id)
+  ON DELETE CASCADE
 );

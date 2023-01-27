@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 file = Path(__file__).resolve()
 parent, root = file.parent, file.parents[1]
@@ -10,17 +11,17 @@ from aid import aid_manager as mngr
 import unittest
 
 class TestStringMethods(unittest.TestCase):
-    def test_start_of_app(self):
-        aid_mngr = mngr.Aid('test.db')
-        val = aid_mngr.set_current_aid('test')
-        self.assertEqual(0 , val)
-        db_path = aid_mngr.get_db_path()
-        del aid_mngr
+    def setUp(self):
+        self.aid_mngr = mngr.Aid('test.db')
+        self.db_path = self.aid_mngr.get_db_path()
+
+    def tearDown(self):
         try:
-            os.remove(db_path)
+            os.remove(self.db_path)
         except OSError:
             pass
-    
 
-if __name__ == '__main__':
-    unittest.main()
+
+    def test_creating_empty_aid(self):
+        val = self.aid_mngr.set_current_aid('test')
+        self.assertEqual(0 , val)

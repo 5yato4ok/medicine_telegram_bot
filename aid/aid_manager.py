@@ -29,7 +29,7 @@ class Aid:
         if self.curr_id is None:
             self._create_new_aid(name)
             self.curr_id = self._get_aid_id(name)
-        return self.get_number_of_meds_for_cur_aid()
+        return self.get_number_of_meds()
 
     def _get_aid_id(self, aid_name):
         db_resp = self.db.execute("SELECT id from aid WHERE name is ?",
@@ -37,7 +37,7 @@ class Aid:
         id = db_resp.fetchall()
         return None if len(id) == 0 else id[0]['id']
 
-    def get_number_of_meds_for_cur_aid(self):
+    def get_number_of_meds(self):
         if self.curr_id is None:
             return -1
 
@@ -73,12 +73,15 @@ class Aid:
         self.db.commit()
 
     def add_med(self, name: str, quantity: int, category: str,
-                box: str, valid_date: date = date(9999, 9, 9)) -> str:
+                box: str, valid_date: datetime = datetime(9999, 9, 9)) -> str:
+        if valid_date is datetime.date:
+            raise Exception("The valid_date must be passed as datetime.datetime")
         # check if such med exist
-        id = self.find_med_by_full_desc(name, box, valid_date)
+        med = self.get_med_by_full_desc(name, box, valid_date)
         # if exist increase
-        if id is not None:
-            self.increase_med(id, quantity)
+        if med is not None:
+            self.increase_med(med, quantity)
+            return med['id']
         # else create new one
         id = Aid.get_uuid()
         sql_req = "INSERT INTO meds (id,name,valid,category,box,quantity,aidid) " \
@@ -96,7 +99,7 @@ class Aid:
         self.db.commit()
         return id
 
-    def find_med_by_full_desc(self, name: str, box: str, valid_date: date) -> str:
+    def get_med_by_full_desc(self, name: str, box: str, valid_date: date) -> str:
         med = None
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name is ? AND box is ? AND valid is ?",
                                   [self.curr_id, name, box, valid_date])
@@ -107,17 +110,23 @@ class Aid:
         self.db.execute("DELETE FROM meds WHERE id = ?", [id])
         self.db.commit()
 
-    def find_meds_by_name(self, name):
+    def get_meds_by_name(self, name):
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name is ?",
                                   [self.curr_id, name])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
 
+    def get_med_by_id(self, id):
+        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND id is ?",
+                                  [self.curr_id, id])
+        med = db_resp.fetchall()
+        return None if len(med) == 0 else med[0]
+
     def get_all_categories(self):
         db_resp = self.db.execute(
-            "SELECT category from meds WHERE aidid is ?", [self.curr_id])
+            "SELECT DISTINCT category from meds WHERE aidid is ?", [self.curr_id])
         cat = db_resp.fetchall()
-        return None if len(cat) == 0 else cat
+        return None if len(cat) == 0 else [x['category'] for x in cat]
 
     def get_meds_by_category(self, category):
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND category is ?",

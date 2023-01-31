@@ -8,6 +8,8 @@ class Aid:
     """Allows to control/query the content of database, containing medicine"""
 
     def __init__(self, db_name='aid.db'):
+        self.curr_id = None
+        self.curr_kit_name = None
         self.schema_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 'schema.sql')
 
@@ -20,12 +22,16 @@ class Aid:
         with open(self.schema_path, mode='r') as f:
             self.db.cursor().executescript(f.read())
             self.db.commit()
+    
+    def get_cur_aid_name(self):
+        return self.curr_kit_name
 
     def get_db_path(self):
         return self.db_path
 
     def set_current_aid(self, name):
         self.curr_id = self._get_aid_id(name)
+        self.curr_kit_name = name
         if self.curr_id is None:
             self._create_new_aid(name)
             self.curr_id = self._get_aid_id(name)

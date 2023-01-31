@@ -22,7 +22,7 @@ class Aid:
         with open(self.schema_path, mode='r') as f:
             self.db.cursor().executescript(f.read())
             self.db.commit()
-    
+
     def get_cur_aid_name(self):
         return self.curr_kit_name
 
@@ -36,6 +36,11 @@ class Aid:
             self._create_new_aid(name)
             self.curr_id = self._get_aid_id(name)
         return self.get_number_of_meds()
+
+    def get_aids(self):
+        db_resp = self.db.execute("SELECT name from aid")
+        els = db_resp.fetchall()
+        return None if len(els) == 0 else els
 
     def _get_aid_id(self, aid_name):
         db_resp = self.db.execute("SELECT id from aid WHERE name is ?",
@@ -66,8 +71,13 @@ class Aid:
         self.db.execute("INSERT INTO aid (id, name) VALUES (?,?)", [id, name])
         self.db.commit()
 
+    def is_initialized(self):
+        return self.curr_id is not None and self.curr_kit_name is not None
+
     def delete_cur_aid(self):
         self._delete_aid(self.curr_id)
+        self.curr_id = None
+        self.curr_kit_name = None
 
     def get_number_of_aids(self) -> int:
         db_resp = self.db.execute("SELECT * from aid")

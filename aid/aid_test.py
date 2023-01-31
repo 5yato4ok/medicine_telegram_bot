@@ -1,15 +1,14 @@
-# fmt: off
-import sys
-from pathlib import Path
-file = Path(__file__).resolve()
-parent, root = file.parent, file.parents[1]
-sys.path.append(str(root))
-# fmt: on
-
 import unittest
-from aid import aid_manager as mngr
+import sys
 import os
 import datetime
+
+from pathlib import Path
+file = Path(__file__).resolve()  # nopep8
+parent, root = file.parent, file.parents[1]  # nopep8
+sys.path.append(str(root))  # nopep8
+
+from aid import aid_manager as mngr
 
 
 class TestStringMethods(unittest.TestCase):
@@ -129,7 +128,8 @@ class TestStringMethods(unittest.TestCase):
         ), 4, "Must be 4 elements in current aid")
 
         categories = self.aid_mngr.get_all_categories()
-        self.assertCountEqual(categories, ['my_category','my_category2'], "Expected two category in test")
+        self.assertCountEqual(
+            categories, ['my_category', 'my_category2'], "Expected two category in test")
 
     def test_validation_of_date(self):
         old_med = [self.aid_mngr.add_med('my_name3', 1, 'my_category', 'box_name',
@@ -146,7 +146,8 @@ class TestStringMethods(unittest.TestCase):
 
     def test_invalid_arg_med(self):
         self.assertRaises(Exception, self.aid_mngr.add_med, ('my_name2', 1, 'my_category', 'box_name',
-                              datetime.date(3022, 12, 25)), "Expected error for incorrect data type")
+                                                             datetime.date(3022, 12, 25)), "Expected error for incorrect data type")
+
 
 if __name__ == '__main__':
     unittest.main()

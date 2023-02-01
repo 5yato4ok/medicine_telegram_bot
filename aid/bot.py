@@ -6,6 +6,8 @@ from telegram.ext import *
 import html
 import json
 import logging
+import datetime
+from re import sub
 from telegram.constants import ParseMode
 import traceback
 file = Path(__file__).resolve()  # nopep8
@@ -28,7 +30,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 aids = mngr.Aid()
-AGREE, INIT_KIT = range(2)
+AGREE, INIT_KIT, MED_NAME, MED_DATE, MED_BOX, MED_CATEGORY, MED_NUM = range(
+    7)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -96,11 +99,10 @@ async def choose_aid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def delete_kit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not aids.is_initialized():
-        context.user_data['error_del'] = True
         logger.error(
             f"Attempt to delete first aid kit without setting current one.")
         await update.message.reply_text(text="To delete current first aid kit you need to set one first. Run command /start to do this")
-        return AGREE
+        return ConversationHandler.END
     count = aids.get_number_of_meds()
     kit_name = aids.get_cur_aid_name()
 
@@ -161,18 +163,98 @@ async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "I bet you look great! Now, send me your location please, or send /skip."
     )
 
+
     return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
     user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.first_name)
+    logger.info("User %s canceled the action conversation.", user.first_name)
     await update.message.reply_text(
         "Action was canceled.", reply_markup=ReplyKeyboardRemove()
     )
 
+    if aids.is_initialized():
+        await help_reply(update, context)
     return ConversationHandler.END
+
+
+async def add_med(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to add medicine without setting current first aid kit.")
+        await update.message.reply_text(text="To add medicine you need to select first aid kit. Run command /start to do this")
+        return ConversationHandler.END
+    user = update.message.from_user['id']
+    context.user_data[user] = {'med': {}}
+    await update.message.reply_text(
+        f"Let's add new medicine. Please input name of medicine."
+    )
+    return MED_NAME
+
+
+async def process_med_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    context.user_data[user]['med']['name'] = update.message.text
+    await update.message.reply_text("Now input quantity of medicine.")
+    return MED_NUM
+
+
+def camel_case(s):
+    s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
+    return ''.join([s[0].lower(), s[1:]])
+
+
+def get_med_msg(med):
+    msg = ""
+    for key, value in med.items():
+        msg += f"{camel_case(key)} : {value}\n"
+    msg.replace('valid_date', "Valid until")
+    return msg
+
+
+async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    try:
+        context.user_data[user]['med']['valid_date'] = datetime.datetime.strptime(update.message.text, '%m/%Y')
+    except Exception as e:
+        logger.error(f"Incorrect format of date. Excpetion: {e}")
+        await update.message.reply_text("❌ Incorrect format of date. Please provide date in following format: mm/yyyy")
+        return MED_DATE
+    cur_med = context.user_data[user]['med']
+    id = aids.add_med(name=cur_med['name'], quantity=cur_med['quantity'],
+                      category=cur_med['category'], box=cur_med['box'], valid_date=cur_med['valid_date'])
+    logger.info(f"Created medicine {cur_med} with id {id}")
+    await update.message.reply_text("✅ Added medicine succefully:\n" + get_med_msg(cur_med))
+    await help_reply(update, context)
+    return ConversationHandler.END
+
+
+async def process_med_box(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    context.user_data[user]['med']['box'] = update.message.text
+    await update.message.reply_text("Now input category of medicine.")
+    return MED_CATEGORY
+
+
+async def process_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    context.user_data[user]['med']['category'] = update.message.text
+    await update.message.reply_text("Now input valid date of medicine. Format of date: mm/yyyy")
+    return MED_DATE
+
+
+async def process_med_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    try:
+        context.user_data[user]['med']['quantity'] = int(update.message.text)
+    except:
+        logger.error(f"Incorrect format of quantity")
+        await update.message.reply_text("❌ Incorrect format of quantity. Please provide quantity of medicine as number")
+        return MED_NUM
+    await update.message.reply_text("Now input the location of medicine.")
+    return MED_BOX
 
 
 def init_handlers(app):
@@ -197,6 +279,20 @@ def init_handlers(app):
         fallbacks=[CommandHandler("cancel", cancel)]
     )
     app.add_handler(delete_aid_handler)
+
+    add_med_handler = ConversationHandler(
+        entry_points=[CommandHandler("add_med", add_med)],
+        states={
+            MED_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_med_name)],
+            MED_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_med_date)],
+            MED_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_med_category)],
+            MED_BOX: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_med_box)],
+            MED_NUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_med_quantity)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
+
+    app.add_handler(add_med_handler)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

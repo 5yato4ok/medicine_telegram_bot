@@ -14,8 +14,11 @@ from aid import aid_manager as mngr
 class TestStringMethods(unittest.TestCase):
     def setUp(self):
         self.db_name = f"test_{self._testMethodName}.db"
+        self.db_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), self.db_name)
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
         self.aid_mngr = mngr.Aid(self.db_name)
-        self.db_path = self.aid_mngr.get_db_path()
         self.aid_mngr.set_current_aid(self.db_name)
 
     def tearDown(self):
@@ -143,6 +146,36 @@ class TestStringMethods(unittest.TestCase):
         ), 3, "Must be 3 elements in current aid")
         res_ids = [v['id'] for v in res]
         self.assertCountEqual(old_med, res_ids, "Must be only one invalid med")
+
+    def test_import_export_csv(self):
+        csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'input_example.csv')
+        csv_path_exp = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'test_export.csv')
+        if os.path.exists(csv_path_exp):
+            os.remove(csv_path_exp)
+        meds = self.aid_mngr.import_aid_from_csv(csv_path)
+        self.assertEqual(len(meds), 59)
+
+        self.aid_mngr.export_aid_to_csv(csv_path_exp)
+
+        self.assertTrue(os.path.exists(csv_path_exp))
+
+        self.aid_mngr.set_current_aid("new_test")
+        meds_from_export = self.aid_mngr.import_aid_from_csv(csv_path_exp)
+
+        self.assertTrue(len(meds) == len(meds_from_export))
+
+        for i in range(len(meds)):
+            self.assertEqual(meds[i]['name'],meds_from_export[i]['name'])
+            self.assertEqual(meds[i]['quantity'],meds_from_export[i]['quantity'])
+            self.assertEqual(meds[i]['box'],meds_from_export[i]['box'])
+            self.assertEqual(meds[i]['category'],meds_from_export[i]['category'])
+            self.assertEqual(meds[i]['valid'],meds_from_export[i]['valid'])
+        
+        self.aid_mngr.delete_cur_aid()
+        os.remove(csv_path_exp)   
+        
 
     def test_invalid_arg_med(self):
         self.assertRaises(Exception, self.aid_mngr.add_med, ('my_name2', 1, 'my_category', 'box_name',

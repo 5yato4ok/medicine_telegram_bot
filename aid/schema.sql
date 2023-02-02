@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS meds(
   valid       TIMESTAMP NOT NULL,
   category    TEXT,
   box         TEXT,
-  quantity    INTEGER,
+  quantity    REAL,
   aidid       TEXT,
   FOREIGN KEY(aidid) 
   REFERENCES aid(id)

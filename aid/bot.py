@@ -1,19 +1,17 @@
 import sys
-from pathlib import Path
 import logging
-from telegram import *
-from telegram.ext import *
 import html
 import json
-import logging
 import datetime
+import traceback
+from pathlib import Path
+from telegram import *
+from telegram.ext import *
 from re import sub
 from telegram.constants import ParseMode
-import traceback
 file = Path(__file__).resolve()  # nopep8
 parent, root = file.parent, file.parents[1]  # nopep8
 sys.path.append(str(root))  # nopep8
-
 
 from aid import aid_manager as mngr
 
@@ -163,7 +161,6 @@ async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "I bet you look great! Now, send me your location please, or send /skip."
     )
 
-
     return ConversationHandler.END
 
 
@@ -217,7 +214,8 @@ def get_med_msg(med):
 async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user['id']
     try:
-        context.user_data[user]['med']['valid_date'] = datetime.datetime.strptime(update.message.text, '%m/%Y')
+        context.user_data[user]['med']['valid_date'] = datetime.datetime.strptime(
+            update.message.text, '%m/%Y')
     except Exception as e:
         logger.error(f"Incorrect format of date. Excpetion: {e}")
         await update.message.reply_text("❌ Incorrect format of date. Please provide date in following format: mm/yyyy")
@@ -248,7 +246,7 @@ async def process_med_category(update: Update, context: ContextTypes.DEFAULT_TYP
 async def process_med_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user['id']
     try:
-        context.user_data[user]['med']['quantity'] = int(update.message.text)
+        context.user_data[user]['med']['quantity'] = float(update.message.text)
     except:
         logger.error(f"Incorrect format of quantity")
         await update.message.reply_text("❌ Incorrect format of quantity. Please provide quantity of medicine as number")

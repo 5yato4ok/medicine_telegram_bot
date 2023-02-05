@@ -119,7 +119,7 @@ class TestStringMethods(unittest.TestCase):
                    self.aid_mngr.add_med('my_name5', 1, 'my_category', 'box_name3',
                                          datetime.datetime.now()),
                    ]
-        self.aid_mngr.add_med('my_name5', 1, 'my_category2', 'box_name3',
+        self.aid_mngr.add_med('my_name5', 1, 'my_other_category', 'box_name3',
                               datetime.datetime.now())
         meds_by_category = self.aid_mngr.get_meds_by_category('my_category')
 
@@ -132,7 +132,7 @@ class TestStringMethods(unittest.TestCase):
 
         categories = self.aid_mngr.get_all_categories()
         self.assertCountEqual(
-            categories, ['my_category', 'my_category2'], "Expected two category in test")
+            categories, set(['my_category', 'my_other_category']), "Expected two category in test")
 
     def test_validation_of_date(self):
         old_med = [self.aid_mngr.add_med('my_name3', 1, 'my_category', 'box_name',

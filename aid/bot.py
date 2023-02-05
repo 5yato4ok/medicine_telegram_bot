@@ -3,11 +3,11 @@ import logging
 import html
 import json
 import datetime
+import os
 import traceback
 from pathlib import Path
 from telegram import *
 from telegram.ext import *
-from re import sub
 from telegram.constants import ParseMode
 file = Path(__file__).resolve()  # nopep8
 parent, root = file.parent, file.parents[1]  # nopep8
@@ -22,23 +22,127 @@ except ValueError:  # Already removed
 
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='Telegramm Bot: %(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
 logger = logging.getLogger(__name__)
 aids = mngr.Aid()
-AGREE, INIT_KIT, MED_NAME, MED_DATE, MED_BOX, MED_CATEGORY, MED_NUM = range(
-    7)
+
+# signals
+AGREE, INIT_KIT, MED_NAME, MED_DATE, \
+    MED_BOX, MED_CATEGORY, MED_NUM, \
+    IMPORT_CSV, SEARCH_INIT, SEARCH_NAME, SEARCH_CATEGORY, \
+    TAKE_NAME, TAKE_NUM, TAKE_DATE, TAKE_BOX = range(15)
+
+# path for import-export files
+download_path = os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), 'downloads')
+file_size_limit = 30*1024*2024
+
+
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to search in first aid kit without setting current one.")
+        await update.message.reply_text(text="Чтобы произвести поиск в аптечке необходимо подключится к ней. Запусти команду /start чтобы это сделать")
+        return ConversationHandler.END
+    reply_keyboard = [["Поиск по имени", "Поиск по категории лекартсва"]]
+    await update.message.reply_text(
+        f"Произвести поиск лекартсва по имени или по категории лекарства.",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Выбери что-то одно"
+        ),
+    )
+    return SEARCH_INIT
+
+
+async def list_med(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to list in first aid kit without setting current one.")
+        await update.message.reply_text(text="Чтобы произвести вывод лекарств в аптечке необходимо подключится к ней. Запусти команду /start чтобы это сделать")
+        return ConversationHandler.END
+    meds = aids.get_all_meds()
+    msg_meds = ""
+    for m in meds:
+        msg_meds += "\n" + mngr.Aid.get_med_msg(m)
+    num_of_found = len(meds)
+    logger.info(f"Listing all {num_of_found} meds")
+    await update.message.reply_text(f"Твоя аптечка содержит {num_of_found} лекарств. {msg_meds}")
+
+
+async def list_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to list in first aid kit without setting current one.")
+        await update.message.reply_text(text="Чтобы произвести вывод лекарств в аптечке необходимо подключится к ней. Запусти команду /start чтобы это сделать")
+        return ConversationHandler.END
+    categories = aids.get_all_categories()
+    msg_cat = ""
+    for c in categories:
+        msg_cat += "\n" + c
+    num_of_found = len(categories)
+    logger.info(f"Listing all {num_of_found} categories")
+    await update.message.reply_text(f"Твоя аптечка содержит {num_of_found} категорий. {msg_cat}")
+
+
+async def process_search_by_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    category = update.message.text
+    logger.info(
+        f"Attempt to search med with category {category} in first aid kit.")
+    meds = aids.get_meds_by_category(category)
+    msg_meds = ""
+    for m in meds:
+        msg_meds += "\n" + mngr.Aid.get_med_msg(m)
+    num_of_found = len(meds)
+    logger.info(f"Were found {num_of_found} medicines: {msg_meds}")
+    await update.message.reply_text(f"Было найдено {num_of_found} лекарств. {msg_meds}")
+    if num_of_found:
+        await update.message.reply_text(f"Чтобы взять лекарство из аптечки используй команду \n"
+                                        f"/take_medicine <имя_лекарства>")
+    await help_reply(update, context)
+    return ConversationHandler.END
+
+
+async def process_search_by_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    name = update.message.text
+    logger.info(f"Attempt to search med with name {name} in first aid kit.")
+    meds = aids.get_meds_by_name(name)
+    msg_meds = ""
+    for m in meds:
+        msg_meds += "\n" + mngr.Aid.get_med_msg(m)
+    num_of_found = len(meds)
+    logger.info(f"Were found {num_of_found} medicines: {msg_meds}")
+    await update.message.reply_text(f"Было найдено {num_of_found} лекарств. {msg_meds}")
+    if num_of_found:
+        await update.message.reply_text(f"Чтобы взять лекарство из аптечки используй команду \n"
+                                        f"/take_medicine {name}")
+    await help_reply(update, context)
+    return ConversationHandler.END
+
+
+async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    search_by_name = "имени" in update.message.text.lower()
+    if search_by_name:
+        await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
+                                       text=f"Введи имя категории.\n Пример: ОРВИ")
+        return SEARCH_NAME
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
+                                       text=f"Введи имя лекарства.\n Пример: пенталгин")
+        await SEARCH_CATEGORY
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    reply_keyboard = [["Use existing one", "Create new one"]]
+    reply_keyboard = [
+        ["Использовать существующую аптечку", "Создать новую аптечку"]]
 
     await update.message.reply_text(
-        f"💊I'm a first aid kit bot. 💊 I can help you to manage your first aid kit content. \n\n Want to use existing first aid kit or create new one?",
+        f"💊Я твой бот-аптечка. 💊 Я могу помочь тебе с управлением состоянием аптечки \n\n"
+        "Хочешь использовать существующую аптечку или создать новую?",
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Pick one"
+            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Выбери что-то одно"
         ),
     )
 
@@ -46,19 +150,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def process_init_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    use_existing_one = "use existing one" in update.message.text.lower()
+    use_existing_one = "существующую" in update.message.text.lower()
     msg = ""
     if use_existing_one:
         existing_aids = aids.get_aids()
         if existing_aids is not None:
-            msg = "There are following first aid kits:"
+            msg = "Сейчас есть следующие аптечки:"
             for x in existing_aids:
                 msg += "\n    " + x['name']
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                           text=f"There is no existing first aid kits. Please create new one")
+                                           text=f"Сейчас нету существующих аптечек. Создай новую")
     await context.bot.send_message(chat_id=update.effective_chat.id,  reply_markup=ReplyKeyboardRemove(),
-                                   text=msg + f"\n\nCall command /aid_kit <your_kit_name> to start using your first aid kit.\n Example:\n /aid_kit ivanov")
+                                   text=msg + f"\n\nВызови команду /aid_kit <имя_аптечки> для того чтобы подключится к своей аптечке.\n Пример:\n /aid_kit имя123")
     return ConversationHandler.END
 
 
@@ -66,14 +170,17 @@ async def help_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not aids.is_initialized():
         return
 
-    msg = "⚙️You can control your first aid kit by sending following commands:⚙️\n"\
-        "/delete_kit - delete your first aid kit and it's content completely\n"\
-        "/search - search the medicine in your aid\n"\
-        "/add_med - add medicine to your first aid kit\n"\
-        "/import - import csv with content of your first aid kit\n"\
-        "/export - export the content of your current first aid kit\n"
+    msg = "⚙️Ты можешь управлять своей аптечкой, исопльзуя следующие команды:⚙️\n"\
+        "/delete_aid_kit - удалить аптечку и всё ее содержимое\n"\
+        "/search - поиск лекарства в аптечке\n"\
+        "/take_med - взять лекарство из аптечки\n"\
+        "/add_med - добавить лекарство в аптечку\n"\
+        "/list_med - вывести все лекартсва из аптечки\n"\
+        "/list_med_category - вывести все категории лекарств из аптечки\n"\
+        "/import_csv - импортировать состояние аптечки из csv\n"\
+        "/export_csv - экспортировать состояние в csv\n"
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text=f"Total number of medicines in your first aid kit <b>{html.escape(aids.get_cur_aid_name())}</b> : "
+                                   text=f"Текущее количество лекарств в твооей аптечке <i><b>{html.escape(aids.get_cur_aid_name())}</b></i> : "
                                    f"{aids.get_number_of_meds()} \n\n" + msg, parse_mode=ParseMode.HTML)
 
 
@@ -85,11 +192,11 @@ async def choose_aid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(aid_name) != 2:
         logger.error("Sent incorect arg to /aid_kit")
         await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                       text="❌ Incorrect command. Run /aid_kit <aid_name>")
+                                       text="❌ Некорректная команда. Используй /aid_kit <имя_аптечки>")
     aid_name = aid_name[1]
     aids.set_current_aid(aid_name)
     await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                   text=f"Your first aid kit name is <b>{html.escape(aid_name)}</b>", parse_mode=ParseMode.HTML)
+                                   text=f"Имя твоей аптечки <b>{html.escape(aid_name)}</b>", parse_mode=ParseMode.HTML)
     logger.info(f"Setting first aid kit {aid_name} as current one successfuly")
 
     await help_reply(update, context)
@@ -99,17 +206,17 @@ async def delete_kit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not aids.is_initialized():
         logger.error(
             f"Attempt to delete first aid kit without setting current one.")
-        await update.message.reply_text(text="To delete current first aid kit you need to set one first. Run command /start to do this")
+        await update.message.reply_text(text="Чтобы удалить аптечку тебе нужно сначала подключится к ней. Запусти команду /start чтобы это сделать")
         return ConversationHandler.END
     count = aids.get_number_of_meds()
     kit_name = aids.get_cur_aid_name()
 
-    reply_keyboard = [["Yes", "No"]]
+    reply_keyboard = [["Да", "Нет"]]
 
     await update.message.reply_text(
-        f"I am going to delete first aid kit {kit_name}, which contains {count} medicine.\n\n Are you sure?",
+        f"Я собираюсь удалить аптечку {kit_name}, которая содержит {count} лекарств.\n\n Ты уверен?",
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Are you sure?"
+            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Ты уверен?"
         ),
     )
 
@@ -117,49 +224,22 @@ async def delete_kit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def process_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if 'error_del' in context.user_data:
-        del context.user_data['error_del']
-        return ConversationHandler.END
     decision = update.message.text
     kit_name = aids.get_cur_aid_name()
-    if decision.lower() == "yes":
+    if decision.lower() == "да":
         aids.delete_cur_aid()
         logger.info("Received confirmation.")
         logger.info(f"Deletion of {kit_name} completed successfuly")
         await update.message.reply_text(
-            text=f"✅ Deleted first aid kit {kit_name} successfuly.\nCall /start to initiate new session.",
+            text=f"✅ Аптечка {kit_name} успешно удалена.\nВызови комнаду /start чтобы начать новую сессию.",
             reply_markup=ReplyKeyboardRemove())
     else:
         logger.info(
             f"Confirmation was not received. Abort deletion of first aid kit")
         await update.message.reply_text(
-            text=f"❌ Confirmation was not received. Abort deletion of {kit_name}",
+            text=f"❌ Подтвтерждение процесса удаления не было получено. Удаление аптечки {kit_name} приостановлено",
             reply_markup=ReplyKeyboardRemove())
         await help_reply(update, context)
-
-    return ConversationHandler.END
-
-
-async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the photo and asks for a location."""
-    user = update.message.from_user
-    photo_file = await update.message.photo[-1].get_file()
-    await photo_file.download_to_drive("user_photo.jpg")
-    logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
-    await update.message.reply_text(
-        "Gorgeous! Now, send me your location please, or send /skip if you don't want to."
-    )
-
-    return ConversationHandler.END
-
-
-async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Skips the photo and asks for a location."""
-    user = update.message.from_user
-    logger.info("User %s did not send a photo.", user.first_name)
-    await update.message.reply_text(
-        "I bet you look great! Now, send me your location please, or send /skip."
-    )
 
     return ConversationHandler.END
 
@@ -169,7 +249,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
     logger.info("User %s canceled the action conversation.", user.first_name)
     await update.message.reply_text(
-        "Action was canceled.", reply_markup=ReplyKeyboardRemove()
+        "Действие было отменено.", reply_markup=ReplyKeyboardRemove()
     )
 
     if aids.is_initialized():
@@ -181,34 +261,182 @@ async def add_med(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not aids.is_initialized():
         logger.error(
             f"Attempt to add medicine without setting current first aid kit.")
-        await update.message.reply_text(text="To add medicine you need to select first aid kit. Run command /start to do this")
+        await update.message.reply_text(text="Чтобы добавить лекарство необходимо подключится к аптечке. Запусти команду /start чтобы это сделать")
         return ConversationHandler.END
     user = update.message.from_user['id']
     context.user_data[user] = {'med': {}}
     await update.message.reply_text(
-        f"Let's add new medicine. Please input name of medicine."
+        f"Давай добавим новое лекарство. Введи название лекарства"
     )
     return MED_NAME
+
+
+async def take_med(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to take medicine in first aid kit without setting current one.")
+        await update.message.reply_text(text="Чтобы взять лекарство из аптечки необходимо подключится к ней. Запусти команду /start чтобы это сделать")
+        return ConversationHandler.END
+    user = update.message.from_user['id']
+    context.user_data[user] = {'take': {}}
+    await update.message.reply_text(f"Введи имя лекарства, которое ты хочешь взять")
+    return TAKE_NAME
+
+
+async def take_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    try:
+        context.user_data[user]['take']['expected_date'] = datetime.datetime.strptime(
+            update.message.text, '%m/%Y')
+    except Exception as e:
+        logger.error(f"Incorrect format of date. Exception: {e}")
+        await update.message.reply_text("❌ Некореектный формат даты. Пожалуйста предоставь дату в следующем формате: mm/yyyy")
+        return TAKE_DATE
+
+    has_such_date = False
+    existed_dates = ""
+    found_med = None
+    for m in context.user_data[user]['take']['meds']:
+        existed_dates += "\n" + m['valid_date'].strftime('%m/%Y')
+        if m['valid_date'] == context.user_data[user]['take']['expected_date']:
+            has_such_date = True
+            found_med = m
+            break
+
+    if not has_such_date:
+        logger.error(f"Found meds doesnot contain provided date.")
+        await update.message.reply_text(f"❌ Найденные лекарства не соответсвуют введенному сроку годности {update.message.text}\n"
+                                        f"Выберите даты одни из приведенных ниже:{existed_dates}")
+        return TAKE_DATE
+
+    if 'check_box' in context.user_data[user]['take']:
+        await update.message.reply_text(f"Введи местоположение лекарства, которое ты хочешь взять")
+        return TAKE_BOX
+
+    del context.user_data[user]['take']['check_date']
+    context.user_data[user]['take']['old_med'] = found_med
+    await update.message.reply_text("Теперь введи количество лекарства")
+    return TAKE_NUM
+
+
+async def take_med_box(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    context.user_data[user]['take']['expected_box'] = update.message.text
+
+    has_such_box = False
+    has_such_date = 'expected_date' not in context.user_data[user]['take']
+    existed_dates = ""
+    existed_box = ""
+    found_med = None
+    for m in context.user_data[user]['take']['meds']:
+        existed_box += "\n" + m['box']
+        existed_dates += "\n" + m['valid_date'].strftime('%m/%Y')
+        if m['box'] == context.user_data[user]['take']['expected_box']:
+            has_such_box = True
+            if 'expected_date' in context.user_data[user]['take'] \
+                    and m['valid_date'] == context.user_data[user]['take']['expected_date']:
+                has_such_date = True
+                found_med = m
+                break
+    if found_med is None:
+        logger.error(
+            f"Were provided incorrect input. Meds has provided box: {has_such_box} and has providied date:{has_such_date}")
+        if not has_such_box:
+            await update.message.reply_text(f"❌ Найденные лекарства не соответсвуют введенному местоположению {update.message.text}\n"
+                                            f"Выберите местоположение одно из приведенных ниже:{existed_box}")
+            return TAKE_BOX
+        if not has_such_date:
+            date_msg = context.user_data[user]['take']['expected_date'].strftime('%m/%Y')
+            await update.message.reply_text(f"❌ Найденные лекарства не соответсвуют введеной комбинации местоположения {update.message.text} и срока годности {date_msg}\n"
+                                            f"Выберите даты одни из приведенных ниже:{existed_dates}")
+                                            
+            return TAKE_DATE
+    del context.user_data[user]['take']['check_box']
+    await update.message.reply_text("Теперь введи количество лекарства")
+    return TAKE_NUM
+
+
+async def process_take_med_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    meds = aids.get_meds_by_name(update.message.text)
+
+    if meds is None:
+        logger.error(
+            f"Take medicine: medicine with name {update.message.text} were not found")
+        await update.message.reply_text(f"❌ Ошибка: Лекарство с именем {update.message.text} не было найдено")
+        await help_reply(update, context)
+        return ConversationHandler.END
+    if len(meds) == 1:
+        logger.info(
+            f"Take medicine: were found only one med for name {update.message.text}")
+        context.user_data[user]['take']['old_med'] = meds[0]
+        await update.message.reply_text("Теперь введи количество лекарства")
+        return TAKE_NUM
+
+    logger.info(
+        f"Take medicine: were found only few meds for name {update.message.text}")
+    msg_meds = ""
+    meds_date = set()
+    meds_box = set()
+    for m in meds:
+        msg_meds += "\n" + mngr.Aid.get_med_msg(m)
+        meds_date.add(m['valid_date'])
+        meds_box.add(m['box'])
+    context.user_data[user]['take']['meds'] = meds
+    msg = f"ℹ️ Было найдено несколько лекарств с именем {update.message.text}. \n"
+    if len(meds_date) > 1:
+        context.user_data[user]['take']['check_date'] = True
+        msg += "⏲️ Лекарства имеют одинаковое название, но разный срок годности.\n"
+
+    if len(meds_box) > 1:
+        context.user_data[user]['take']['check_box'] = True
+        msg += "💼 Лекарства имеют одинаковое название, но разное местоположение.\n"
+
+    msg += f"Найденные лекарства: {msg_meds}\n"
+    if 'check_date' in context.user_data[user]['take']:
+        msg += f"Пожалуйста введи срок годности лекарства {update.message.text}."
+        await update.message.reply_text(text=msg)
+        return TAKE_DATE
+
+    if 'check_box' in context.user_data[user]['take']:
+        msg += f"Пожалуйста введи местоположение лекарства {update.message.text}."
+        await update.message.reply_text(text=msg)
+        return TAKE_BOX
+    msg += "❌ Ошибка: Необработанное различие между лекарствами. Обратитесь к разработчику.\n"
+    await update.message.reply_text(text=msg)
+    return ConversationHandler.END
+
+
+async def process_take_med_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user['id']
+    try:
+        context.user_data[user]['take']['new_quantity'] = float(
+            update.message.text)
+    except:
+        logger.error(f"Incorrect format of quantity")
+        await update.message.reply_text("❌ Некорректный формат количества. Пожалуйста предоставь количество лекарства как число.")
+        return MED_NUM
+
+    med_desc = context.user_data[user]['take']
+    logger.info(
+        f"Attempt to reduce medicine {med_desc['old_med']['id']} on quantity {med_desc['new_quantity']}")
+    aids.reduce_med(med_desc['quantity'], med_desc['old_med'])
+
+    new_med = aids.get_med_by_id(med_desc['old_med']['id'])
+    msg = "✅ Изменение количества лекарства успешно произведено.\n"
+    if new_med is None:
+        msg += "Лекарство было удалено из аптечки, так как было взято полное количество лекарства"
+    else:
+        msg += "Текущее состояние лекарства:" + mngr.Aid.get_med_msg(new_med)
+    await update.message.reply_text(msg)
+    return ConversationHandler.END
 
 
 async def process_med_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user['id']
     context.user_data[user]['med']['name'] = update.message.text
-    await update.message.reply_text("Now input quantity of medicine.")
+    await update.message.reply_text("Теперь введи количество лекарства")
     return MED_NUM
-
-
-def camel_case(s):
-    s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
-    return ''.join([s[0].lower(), s[1:]])
-
-
-def get_med_msg(med):
-    msg = ""
-    for key, value in med.items():
-        msg += f"{camel_case(key)} : {value}\n"
-    msg.replace('valid_date', "Valid until")
-    return msg
 
 
 async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -217,14 +445,14 @@ async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data[user]['med']['valid_date'] = datetime.datetime.strptime(
             update.message.text, '%m/%Y')
     except Exception as e:
-        logger.error(f"Incorrect format of date. Excpetion: {e}")
-        await update.message.reply_text("❌ Incorrect format of date. Please provide date in following format: mm/yyyy")
+        logger.error(f"Incorrect format of date. Exception: {e}")
+        await update.message.reply_text("❌ Некореектный формат даты. Пожалуйста предоставь дату в следующем формате: mm/yyyy")
         return MED_DATE
     cur_med = context.user_data[user]['med']
     id = aids.add_med(name=cur_med['name'], quantity=cur_med['quantity'],
                       category=cur_med['category'], box=cur_med['box'], valid_date=cur_med['valid_date'])
     logger.info(f"Created medicine {cur_med} with id {id}")
-    await update.message.reply_text("✅ Added medicine succefully:\n" + get_med_msg(cur_med))
+    await update.message.reply_text("✅ Лекарство добавлено успешно:\n" + mngr.Aid.get_med_msg(cur_med))
     await help_reply(update, context)
     return ConversationHandler.END
 
@@ -232,14 +460,14 @@ async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def process_med_box(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user['id']
     context.user_data[user]['med']['box'] = update.message.text
-    await update.message.reply_text("Now input category of medicine.")
+    await update.message.reply_text("Теперь введи от чего данное лекарство.")
     return MED_CATEGORY
 
 
 async def process_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user['id']
     context.user_data[user]['med']['category'] = update.message.text
-    await update.message.reply_text("Now input valid date of medicine. Format of date: mm/yyyy")
+    await update.message.reply_text("Теперь введи срок годности лекарства. Формат даты: mm/yyyy")
     return MED_DATE
 
 
@@ -249,10 +477,71 @@ async def process_med_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data[user]['med']['quantity'] = float(update.message.text)
     except:
         logger.error(f"Incorrect format of quantity")
-        await update.message.reply_text("❌ Incorrect format of quantity. Please provide quantity of medicine as number")
+        await update.message.reply_text("❌ Некорректный формат количества. Пожалуйста предоставь количество лекарства как число.")
         return MED_NUM
-    await update.message.reply_text("Now input the location of medicine.")
+    await update.message.reply_text("Теперь введи местоположение лекарства")
     return MED_BOX
+
+
+async def import_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to import medicines without setting current first aid kit.")
+        await update.message.reply_text(text="Для того чтобы импортировать лекарства из csv файла, необходимо подключится к аптечке. Запусти команду /start чтобы это сделать")
+        return ConversationHandler.END
+    await update.message.reply_text(
+        f"Давай добавим лекарства из твоего файла. Добавь как приложение файл csv, из которого надо произвести импорт"
+        "Ожидается что формат строки в  CSV файле будет следующим:\n"
+        "Название,Срок годности,От чего,Местоположение,Количество\n"
+        "Формат даты: mm/yyyy"
+        "Размер файла максимум 20mb"
+    )
+
+    if not os.path.exists(download_path):
+        os.mkdir(download_path)
+    return IMPORT_CSV
+
+
+async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not aids.is_initialized():
+        logger.error(
+            f"Attempt to export medicines without setting current first aid kit.")
+        await update.message.reply_text(text="Чтобы экспортировать лекарства из аптечки необходимо сначала подключится к аптечке. Чтобы это сделать запусти команду /start")
+        return
+
+    if not os.path.exists(download_path):
+        os.mkdir(download_path)
+
+    user = update.message.from_user
+    file_path = os.path.join(download_path, f"{user.id}.csv")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    aids.export_aid_to_csv(file_path)
+    await context.bot.send_document(chat_id=update.effective_chat.id, document=file_path)
+    await help_reply(update, context)
+
+
+async def process_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user
+    file_path = os.path.join(download_path, f"{user.id}.csv")
+
+    if update.message.document.file_size >= file_size_limit:
+        await update.message.reply_text(f"❌ Ошибка: файл слишком большой. Максимальный размер 20мб.")
+        logger.error(
+            f'Attempt to load file too big from user {user.first_name}. Document description: {update.message.document}')
+        return ConversationHandler.END
+    doc_file = await update.message.document.get_file()
+    await doc_file.download_to_drive(file_path)
+    logger.info(
+        f"Loaded file {update.message.document} from user {user.first_name} successfuly")
+    imp_meds = aids.import_aid_from_csv(file_path)
+    os.remove(file_path)
+
+    await update.message.reply_text(f"✅ Было успешно загружено {len(imp_meds)} лекарств")
+
+    await help_reply(update, context)
+    return ConversationHandler.END
 
 
 def init_handlers(app):
@@ -260,19 +549,19 @@ def init_handlers(app):
         entry_points=[CommandHandler("start", start)],
         states={
             INIT_KIT: [MessageHandler(filters.Regex(
-                "^(Use existing one|Create new one)$"), process_init_aid)]
+                "^(Использовать существующую аптечку|Создать новую аптечку)$"), process_init_aid)]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
-    choose_aid_handler = CommandHandler('aid_kit', choose_aid)
-    app.add_handler(choose_aid_handler)
+
+    app.add_handler(CommandHandler("aid_kit", choose_aid))
     app.add_handler(init_aid_handler)
 
     delete_aid_handler = ConversationHandler(
-        entry_points=[CommandHandler("delete_kit", delete_kit)],
+        entry_points=[CommandHandler("delete_aid_kit", delete_kit)],
         states={
             AGREE: [MessageHandler(filters.Regex(
-                "^(Yes|No|yes|no)$"), process_delete)]
+                "^(Да|Нет|да|нет)$"), process_delete)]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
@@ -291,6 +580,31 @@ def init_handlers(app):
     )
 
     app.add_handler(add_med_handler)
+
+    import_csv_handler = ConversationHandler(
+        entry_points=[CommandHandler("import_csv", import_entry)],
+        states={IMPORT_CSV: [MessageHandler(
+            filters.Document.FileExtension("csv"), process_import)]},
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
+
+    app.add_handler(import_csv_handler)
+    app.add_handler(CommandHandler("export_csv", export_csv))
+    app.add_handler(CommandHandler("list_med", list_med))
+    app.add_handler(CommandHandler("list_med_category", list_med_category))
+
+    search_med_handler = ConversationHandler(
+        entry_points=[CommandHandler("search", search)],
+        states={
+            SEARCH_INIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_search)],
+            SEARCH_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_search_by_name)],
+            SEARCH_CATEGORY: [MessageHandler(
+                filters.TEXT & ~filters.COMMAND, process_search_by_category)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
+
+    app.add_handler(search_med_handler)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -4,14 +4,16 @@ import uuid
 import csv
 import logging
 from datetime import datetime, date
+from re import sub
 
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='AidManager: %(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
 logger = logging.getLogger(__name__)
+
 
 class Aid:
     """Allows to control/query the content of database, containing medicine"""
@@ -31,6 +33,19 @@ class Aid:
         with open(self.schema_path, mode='r') as f:
             self.db.cursor().executescript(f.read())
             self.db.commit()
+
+    @staticmethod
+    def get_med_msg(med):
+        msg = ""
+        for key, value in med.items():
+            msg += f"{Aid.camel_case(key)} : {value}\n"
+        msg.replace('valid_date', "Valid until")
+        return msg
+
+    @staticmethod
+    def camel_case(s):
+        s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
+        return ''.join([s[0].lower(), s[1:]])
 
     def get_cur_aid_name(self):
         return self.curr_kit_name
@@ -68,38 +83,47 @@ class Aid:
 
     def parse_date(self, date_text, full_date=False):
         try:
-            #09/9999
+            # 09/9999
             v_date = datetime.strptime(date_text, '%m/%Y')
             return v_date
         except ValueError:
-            #9999-09-01 00:00:00
+            # 9999-09-01 00:00:00
             v_date = datetime.strptime(date_text, '%Y-%m-%d %H:%M:%S')
             return v_date
 
-    def import_aid_from_csv(self,csv_path):
+    def import_aid_from_csv(self, csv_path):
         '''Format of CSV: Название,Срок годности,От чего,Местоположение,Количество'''
         if not os.path.exists(csv_path):
             raise Exception("Incorrect path to csv")
         res = []
-        with open(csv_path,'r') as csv_file:
+        with open(csv_path, 'r') as csv_file:
+            total_num = len(list(csv.reader(csv_file)))
+        with open(csv_path, 'r') as csv_file:
             reader = csv.DictReader(csv_file)
+            cur_line = 0
             for row in reader:
                 try:
+                    cur_line += 1
                     v_date = self.parse_date(row['Срок годности'])
-                    med_id = self.add_med(name=row['Название'], quantity=row['Количество'], category=row['От чего'], 
-                    box=row['Местоположение'], valid_date=v_date)
+                    med_id = self.add_med(name=row['Название'], quantity=row['Количество'], category=row['От чего'],
+                                          box=row['Местоположение'], valid_date=v_date)
                     res.append(self.get_med_by_id(med_id))
+                    logger.info(f"Imported row {cur_line}/{total_num}.{row}")
                 except Exception as e:
-                    logger.error(f"ERROR: Encountered error during parsing the row {row}\nError: {e}")
+                    logger.error(
+                        f"ERROR: Encountered error during parsing the row {row}\nError: {e}")
         return res
 
     def export_aid_to_csv(self, csv_path):
         meds = self.get_all_meds()
         with open(csv_path, 'w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',',
-                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            csv_writer.writerow(['Id лекарства','Название','Срок годности','От чего','Местоположение','Количество','Id аптечки'])
+                                    quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow(['Id лекарства', 'Название', 'Срок годности',
+                                'От чего', 'Местоположение', 'Количество', 'Id аптечки'])
             csv_writer.writerows(meds)
+        logger.info(
+            f"Exported {len(meds)} rows from aid kit {self.curr_kit_name}")
 
     def get_uuid() -> str:
         return str(uuid.uuid1()).replace('-', '')
@@ -129,8 +153,11 @@ class Aid:
     def add_med(self, name: str, quantity: float, category: str,
                 box: str, valid_date: datetime = datetime(9999, 9, 9)) -> str:
         if valid_date is datetime.date:
-            raise Exception("The valid_date must be passed as datetime.datetime")
+            raise Exception(
+                "The valid_date must be passed as datetime.datetime")
         # check if such med exist
+        name = name.lower()
+        box = box.lower()
         med = self.get_med_by_full_desc(name, box, valid_date)
         # if exist increase
         if med is not None:
@@ -140,6 +167,7 @@ class Aid:
         id = Aid.get_uuid()
         sql_req = "INSERT INTO meds (id,name,valid,category,box,quantity,aidid) " \
             "values (:id, :name, :valid, :category, :box, :quantity, :aidid)"
+        category = category.lower()
         kwargs = {
             "id": id,
             "name": name,
@@ -154,6 +182,7 @@ class Aid:
         return id
 
     def get_med_by_full_desc(self, name: str, box: str, valid_date: date) -> str:
+        name = name.lower()
         med = None
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name is ? AND box is ? AND valid is ?",
                                   [self.curr_id, name, box, valid_date])
@@ -165,6 +194,7 @@ class Aid:
         self.db.commit()
 
     def get_meds_by_name(self, name):
+        name = name.lower()
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name is ?",
                                   [self.curr_id, name])
         med = db_resp.fetchall()
@@ -180,15 +210,27 @@ class Aid:
         db_resp = self.db.execute(
             "SELECT DISTINCT category from meds WHERE aidid is ?", [self.curr_id])
         cat = db_resp.fetchall()
-        return None if len(cat) == 0 else [x['category'] for x in cat]
+        if len(cat) == 0:
+            return None
+        result = set()
+        for row in cat:
+            c_str = row['category']
+            c_str_spl = c_str.split(',')
+            if len(c_str) == 0:
+                result.add(str(c_str).strip())
+            else:
+                for sub in c_str_spl:
+                    result.add(str(sub).strip())
+        return result
 
-    def get_meds_by_category(self, category):
-        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND category is ?",
-                                  [self.curr_id, category])
+    def get_meds_by_category(self, category: str):
+        category = category.lower()
+        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND category LIKE ?",
+                                  [self.curr_id, '%'+category+'%'])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
 
-    def reduce_med(self, num, med):
+    def reduce_med(self, num: float, med):
         new_quan = med['quantity'] - num
         if new_quan <= 0:
             self.delete_med(med['id'])
@@ -197,7 +239,7 @@ class Aid:
                             new_quan, med['id']])
             self.db.commit()
 
-    def increase_med(self, med, num):
+    def increase_med(self, med, num: float):
         new_quan = num + med['quantity']
         self.db.execute("UPDATE meds SET quantity = ? WHERE id = ?", [
                         new_quan, med['id']])

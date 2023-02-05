@@ -167,15 +167,16 @@ class TestStringMethods(unittest.TestCase):
         self.assertTrue(len(meds) == len(meds_from_export))
 
         for i in range(len(meds)):
-            self.assertEqual(meds[i]['name'],meds_from_export[i]['name'])
-            self.assertEqual(meds[i]['quantity'],meds_from_export[i]['quantity'])
-            self.assertEqual(meds[i]['box'],meds_from_export[i]['box'])
-            self.assertEqual(meds[i]['category'],meds_from_export[i]['category'])
-            self.assertEqual(meds[i]['valid'],meds_from_export[i]['valid'])
-        
+            self.assertEqual(meds[i]['name'], meds_from_export[i]['name'])
+            self.assertEqual(meds[i]['quantity'],
+                             meds_from_export[i]['quantity'])
+            self.assertEqual(meds[i]['box'], meds_from_export[i]['box'])
+            self.assertEqual(meds[i]['category'],
+                             meds_from_export[i]['category'])
+            self.assertEqual(meds[i]['valid'], meds_from_export[i]['valid'])
+
         self.aid_mngr.delete_cur_aid()
-        os.remove(csv_path_exp)   
-        
+        os.remove(csv_path_exp)
 
     def test_invalid_arg_med(self):
         self.assertRaises(Exception, self.aid_mngr.add_med, ('my_name2', 1, 'my_category', 'box_name',

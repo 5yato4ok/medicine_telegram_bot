@@ -1,29 +1,53 @@
-# README #
 
-This README would normally document whatever steps are necessary to get your application up and running.
+# First Aid Kit telegram bot
 
-### What is this repository for? ###
+This a telegram bot, that will help you to manage the content of your first aid kit.
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+Bot simply provides control over content of sqlite database.
 
-### How do I get set up? ###
+The content of first aid kit could be described as csv file. Check file [input_example.csv](aid/input_example.csv) as example of input.
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+Also medicine could be added one by one.
+ 
 
-### Contribution guidelines ###
+## Installation
 
-* Writing tests
-* Code review
-* Other guidelines
+Install requirements for project
 
-### Who do I talk to? ###
+```bash
+  pip install -r requirements.txt
+```
 
-* Repo owner or admin
-* Other community or team contact
+
+## Usage
+
+To launch bot run following command
+```bash
+python3 bot.py
+```
+
+
+## Running Tests
+
+To run tests, run the following command
+
+```bash
+  python3 aid/aid_test.py
+```
+
+
+## Full list of bot commands
+
+| Command | Description                |
+| :-------- | :------------------------- |
+| /delete_aid_kit | Delete first aid kit and all it's content|
+|/search | Search medicine in first aid kit |
+|/take_med | Take medicine from first aid kit|
+|/add_med | Add medicine to first aid kit|
+|/list_med | List all medicines |
+|/list_med_category | List all categories of medicines|
+|/import_csv | Import medicines from csv file|
+|/export_csv | Export current first aid kit to csv file|
+|/cancel | Cancel current command|
+|/aid_kit <name> | Connect to first aid kit with name|
+    

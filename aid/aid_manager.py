@@ -8,7 +8,7 @@ from re import sub
 
 
 logging.basicConfig(
-    format='AidManager: %(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
@@ -35,11 +35,20 @@ class Aid:
             self.db.commit()
 
     @staticmethod
-    def get_med_msg(med):
+    def get_med_msg(med, print_id: bool = False, print_aid_id: bool = False):
+        if med is None:
+            logger.error("Empty medicine were provided")
+            return ""
         msg = ""
-        for key, value in med.items():
-            msg += f"{Aid.camel_case(key)} : {value}\n"
-        msg.replace('valid_date', "Valid until")
+        msg += f"\n Name: {med['name']}"
+        msg += f"\n Valid until: {med['valid'].strftime('%m/%Y')}"
+        msg += f"\n Categories: {med['category']}"
+        msg += f"\n Location: {med['box']}"
+        msg += f"\n Quantity: {med['quantity']}"
+        if print_id:
+            msg += f"\n Id:{med['id']}"
+        if print_aid_id:
+            msg += f"\n AidId:{med['aidid']}"
         return msg
 
     @staticmethod
@@ -130,6 +139,7 @@ class Aid:
 
     def _create_new_aid(self, name):
         id = Aid.get_uuid()
+        logger.info(f"Creation of new first aid kit with id {id}")
         self.db.execute("INSERT INTO aid (id, name) VALUES (?,?)", [id, name])
         self.db.commit()
 
@@ -147,6 +157,7 @@ class Aid:
         return len(num_of_els)
 
     def _delete_aid(self, id):
+        logger.info(f"Deletion of aid kid with id {id}")
         self.db.execute("DELETE FROM aid WHERE id = ?", [id])
         self.db.commit()
 
@@ -155,12 +166,16 @@ class Aid:
         if valid_date is datetime.date:
             raise Exception(
                 "The valid_date must be passed as datetime.datetime")
+        logger.info(f"Attempt to add medicine with following info:"
+                    f"name:{name}. quantity:{quantity}. category: {category}. box {box}. valid_date {valid_date}")
         # check if such med exist
         name = name.lower()
         box = box.lower()
         med = self.get_med_by_full_desc(name, box, valid_date)
         # if exist increase
         if med is not None:
+            logger.info(
+                f"Medicine {med['id']} already exist. Adding quantity to existing one")
             self.increase_med(med, quantity)
             return med['id']
         # else create new one
@@ -190,10 +205,12 @@ class Aid:
         return None if len(med) == 0 else med[0]
 
     def delete_med(self, id):
+        logger.info(f"Deletion of med with id '{id}'")
         self.db.execute("DELETE FROM meds WHERE id = ?", [id])
         self.db.commit()
 
     def get_meds_by_name(self, name):
+        logger.info(f"Attempt to search med by name '{name}'")
         name = name.lower()
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name is ?",
                                   [self.curr_id, name])
@@ -201,6 +218,7 @@ class Aid:
         return None if len(med) == 0 else med
 
     def get_med_by_id(self, id):
+        logger.info(f"Attempt to search med by id '{id}'")
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND id is ?",
                                   [self.curr_id, id])
         med = db_resp.fetchall()
@@ -232,6 +250,8 @@ class Aid:
 
     def reduce_med(self, num: float, med):
         new_quan = med['quantity'] - num
+        logger.info(
+            f"Setting new quantity {new_quan} of med with id {med[id]}")
         if new_quan <= 0:
             self.delete_med(med['id'])
         else:
@@ -241,6 +261,7 @@ class Aid:
 
     def increase_med(self, med, num: float):
         new_quan = num + med['quantity']
+        logger.info(f"Set new quantity {new_quan} to med {med['id']}")
         self.db.execute("UPDATE meds SET quantity = ? WHERE id = ?", [
                         new_quan, med['id']])
         self.db.commit()

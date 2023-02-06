@@ -9,6 +9,7 @@ from pathlib import Path
 from telegram import *
 from telegram.ext import *
 from telegram.constants import ParseMode
+
 file = Path(__file__).resolve()  # nopep8
 parent, root = file.parent, file.parents[1]  # nopep8
 sys.path.append(str(root))  # nopep8
@@ -19,7 +20,6 @@ try:
     sys.path.remove(str(parent))
 except ValueError:  # Already removed
     pass
-
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -38,12 +38,13 @@ AGREE, INIT_KIT, MED_NAME, MED_DATE, \
 # path for import-export files
 download_path = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), 'downloads')
-file_size_limit = 30*1024*2024
+file_size_limit = 30 * 1024 * 2024
 MSG_MAX_SIZE = 1500
+MAX_LINE_BUTTON_LENGTH = 3
 
 
 def split_by_size(msg, n):
-    chunks = [msg[i:i+n] for i in range(0, len(msg), n)]
+    chunks = [msg[i:i + n] for i in range(0, len(msg), n)]
     return chunks
 
 
@@ -65,7 +66,8 @@ async def is_not_initialized(operation_ru: str, operation_en: str, update: Updat
     if not aids.is_initialized():
         logger.error(
             f"Attempt to process operation '{operation_en}' in first aid kit without setting current one.")
-        await update.message.reply_text(text=f"Чтобы произвести операцию '{operation_ru}' необходимо подключится к аптечке. Запусти команду /start чтобы это сделать")
+        await update.message.reply_text(
+            text=f"Чтобы произвести операцию '{operation_ru}' необходимо подключится к аптечке. Запусти команду /start чтобы это сделать")
         return True
     return False
 
@@ -134,7 +136,7 @@ async def process_search_by_category(update: Update, context: ContextTypes.DEFAU
         num_of_found = len(meds)
         logger.info(f"Were found {num_of_found} medicines.")
         msg = f"Было найдено {num_of_found} лекарств. {msg_meds}\n" \
-            f"Чтобы взять лекарство из аптечки используй команду /take_med"
+              f"Чтобы взять лекарство из аптечки используй команду /take_med"
     else:
         msg = f"Категория {category} не была найдена"
     await send_big_message(update, msg)
@@ -153,8 +155,8 @@ async def process_search_by_name(update: Update, context: ContextTypes.DEFAULT_T
             msg_meds += "\n" + mngr.Aid.get_med_msg(m)
         num_of_found = len(meds)
         logger.info(f"Were found {num_of_found} medicines.")
-        msg = f"Было найдено {num_of_found} лекарств. {msg_meds}\n"\
-            f"Чтобы взять лекарство из аптечки используй команду /take_med"
+        msg = f"Было найдено {num_of_found} лекарств. {msg_meds}\n" \
+              f"Чтобы взять лекарство из аптечки используй команду /take_med"
     else:
         msg = f"Лекарство {name} не было найдено."
 
@@ -177,71 +179,92 @@ async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     reply_keyboard = [
-        ["Использовать существующую аптечку", "Создать новую аптечку"]]
+        [
+            InlineKeyboardButton("Использовать существующую аптечку", callback_data="old"),
+            InlineKeyboardButton("Создать новую аптечку", callback_data="new")
+        ]
+    ]
 
     await update.message.reply_text(
         f"💊Я твой бот-аптечка. 💊 Я могу помочь тебе с управлением состоянием аптечки \n\n"
         "Хочешь использовать существующую аптечку или создать новую?",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Выбери что-то одно"
-        ),
+        reply_markup=InlineKeyboardMarkup(reply_keyboard)
     )
 
     return INIT_KIT
 
 
-async def process_init_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    use_existing_one = "существующую" in update.message.text.lower()
-    msg = ""
-    if use_existing_one:
-        existing_aids = aids.get_aids()
-        if existing_aids is not None:
-            msg = "Сейчас есть следующие аптечки:"
-            for x in existing_aids:
-                msg += "\n    " + x['name']
-        else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                           text=f"Сейчас нету существующих аптечек. Создай новую")
-    await context.bot.send_message(chat_id=update.effective_chat.id,  reply_markup=ReplyKeyboardRemove(),
-                                   text=msg + f"\n\nВызови команду /aid_kit <имя_аптечки> для того чтобы подключится к своей аптечке.\n Пример:\n /aid_kit имя123")
+AID_CREATE_START, AID_CHOOSE_START, AID_CREATE, AID_CHOOSE = range(4)
+
+
+async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid_name):
+    chat_id = update.effective_chat.id
+    aids.connect_to_aid(aid_name, str(chat_id))
+    await context.bot.send_message(chat_id=chat_id, reply_markup=ReplyKeyboardRemove(),
+                                   text=f"Имя твоей аптечки <b>{html.escape(aid_name)}</b>", parse_mode=ParseMode.HTML)
+    logger.info(f"Setting first aid kit {aid_name} as current one successfuly")
+
+    await help_reply(update, context)
+
+
+async def init_create_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text="Введи имя новой аптечки")
+    return AID_CREATE
+
+
+async def process_create_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    aid_name = update.message.text
+    await connect_to_aid(update, context, aid_name)
     return ConversationHandler.END
+
+
+async def process_choose_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    aid_name = query.data
+    aid_name = aid_name.replace('aid_name:', '')
+    await connect_to_aid(update, context, aid_name)
+
+
+async def init_choose_existing_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    existing_aids = aids.get_aids(owner=str(update.effective_chat.id))
+    if existing_aids is not None:
+        res_aids_name = []
+        user_aids_line = []
+        for x in existing_aids:
+            user_aids_line.append(InlineKeyboardButton(text=x['name'], callback_data="aid_name:" + x['name']))
+            if len(user_aids_line) >= MAX_LINE_BUTTON_LENGTH:
+                res_aids_name.append(user_aids_line)
+                user_aids_line = []
+        if len(user_aids_line) != 0:
+            res_aids_name.append(user_aids_line)
+        await update.callback_query.edit_message_text("Выбери одну из существующих аптечек",
+                                                      reply_markup=InlineKeyboardMarkup(res_aids_name))
+        return AID_CHOOSE
+    else:
+        await update.callback_query.edit_message_text("Сейчас нету существующих аптечек. Введи имя новой аптечки")
+        return AID_CREATE
 
 
 async def help_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not aids.is_initialized():
         return
 
-    msg = "⚙️Ты можешь управлять своей аптечкой, используя следующие команды:⚙️\n"\
-        "/delete_aid_kit - удалить аптечку и всё ее содержимое\n"\
-        "/search - поиск лекарства в аптечке\n"\
-        "/take_med - взять лекарство из аптечки\n"\
-        "/add_med - добавить лекарство в аптечку\n"\
-        "/list_med - вывести все лекартсва из аптечки\n"\
-        "/list_med_category - вывести все категории лекарств из аптечки\n"\
-        "/import_csv - импортировать состояние аптечки из csv\n"\
-        "/export_csv - экспортировать состояние в csv\n"\
-        "/cancel - отменить текущую команду"
+    msg = "⚙️Ты можешь управлять своей аптечкой, используя следующие команды:⚙️\n" \
+          "/delete_aid_kit - удалить аптечку и всё ее содержимое\n" \
+          "/search - поиск лекарства в аптечке\n" \
+          "/take_med - взять лекарство из аптечки\n" \
+          "/add_med - добавить лекарство в аптечку\n" \
+          "/list_med - вывести все лекартсва из аптечки\n" \
+          "/list_med_category - вывести все категории лекарств из аптечки\n" \
+          "/import_csv - импортировать состояние аптечки из csv\n" \
+          "/export_csv - экспортировать состояние в csv\n" \
+          "/cancel - отменить текущую команду"
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text=f"Текущее количество лекарств в твоей аптечке <i><b>{html.escape(aids.get_cur_aid_name())}</b></i> : "
-                                   f"{aids.get_number_of_meds()} \n\n" + msg, parse_mode=ParseMode.HTML)
-
-
-async def choose_aid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message is None:
-        return
-    message = update.message.text
-    aid_name = message.split()
-    if len(aid_name) != 2:
-        logger.error("Sent incorect arg to /aid_kit")
-        await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                       text="❌ Некорректная команда. Используй /aid_kit <имя_аптечки>")
-    aid_name = aid_name[1]
-    aids.set_current_aid(aid_name)
-    await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                   text=f"Имя твоей аптечки <b>{html.escape(aid_name)}</b>", parse_mode=ParseMode.HTML)
-    logger.info(f"Setting first aid kit {aid_name} as current one successfuly")
-
-    await help_reply(update, context)
+                                        f"{aids.get_number_of_meds()} \n\n" + msg, parse_mode=ParseMode.HTML)
 
 
 async def delete_kit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -370,7 +393,8 @@ async def process_take_med_quantity(update: Update, context: ContextTypes.DEFAUL
         med_desc['new_quantity'] = float(update.message.text)
     except:
         logger.error(f"Incorrect format of quantity")
-        await update.message.reply_text("❌ Некорректный формат количества. Пожалуйста предоставь количество лекарства как число.")
+        await update.message.reply_text(
+            "❌ Некорректный формат количества. Пожалуйста предоставь количество лекарства как число.")
         return MED_NUM
 
     old_med = med_desc['old_med']
@@ -386,7 +410,7 @@ async def process_take_med_quantity(update: Update, context: ContextTypes.DEFAUL
             msg += "Лекарство было удалено из аптечки, так как было взято полное количество лекарства"
         else:
             msg += "Текущее состояние лекарства:" + \
-                mngr.Aid.get_med_msg(new_med)
+                   mngr.Aid.get_med_msg(new_med)
     else:
         logger.error('Incorrect medicine were found')
         msg = "❌ Некорректные входные данные. Операция отменена"
@@ -408,7 +432,8 @@ async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             update.message.text, '%m/%Y')
     except Exception as e:
         logger.error(f"Incorrect format of date. Exception: {e}")
-        await update.message.reply_text("❌ Некореектный формат даты. Пожалуйста предоставь дату в следующем формате: mm/yyyy")
+        await update.message.reply_text(
+            "❌ Некореектный формат даты. Пожалуйста предоставь дату в следующем формате: mm/yyyy")
         return MED_DATE
 
     cur_med = get_user_data(update, context)['med']
@@ -441,7 +466,8 @@ async def process_med_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
             'med']['quantity'] = float(update.message.text)
     except:
         logger.error(f"Incorrect format of quantity")
-        await update.message.reply_text("❌ Некорректный формат количества. Пожалуйста предоставь количество лекарства как число.")
+        await update.message.reply_text(
+            "❌ Некорректный формат количества. Пожалуйста предоставь количество лекарства как число.")
         return MED_NUM
     await update.message.reply_text("Теперь введи местоположение лекарства")
     return MED_BOX
@@ -506,13 +532,15 @@ def init_handlers(app):
     init_aid_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            INIT_KIT: [MessageHandler(filters.Regex(
-                "^(Использовать существующую аптечку|Создать новую аптечку)$"), process_init_aid)]
+            INIT_KIT: [
+                CallbackQueryHandler(init_create_aid, pattern="^new$"),
+                CallbackQueryHandler(init_choose_existing_aid, pattern="^old$")
+            ],
+            AID_CHOOSE: [CallbackQueryHandler(process_choose_aid, pattern="^aid_name:.*")],
+            AID_CREATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_create_aid)]
         },
-        fallbacks=[CommandHandler("cancel", cancel)]
+        fallbacks=[CommandHandler("start", start)]
     )
-
-    app.add_handler(CommandHandler("aid_kit", choose_aid))
     app.add_handler(init_aid_handler)
 
     delete_aid_handler = ConversationHandler(
@@ -609,8 +637,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 if __name__ == '__main__':
     # TODO: move token to secure place
-    app = ApplicationBuilder().token(
-        '5898027021:AAG-et5fU_5nONWeaFjkbdbtDSTSqi0G_50').build()
+    real = '5898027021:AAG-et5fU_5nONWeaFjkbdbtDSTSqi0G_50'
+    test = '6080292253:AAHlt5TQojPiEKEz8bI4A7CU6F7BPqPPWRE'
+    app = ApplicationBuilder().token(test).build()
     init_handlers(app)
     app.add_error_handler(error_handler)
     app.run_polling()

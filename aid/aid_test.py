@@ -4,6 +4,7 @@ import os
 import datetime
 
 from pathlib import Path
+
 file = Path(__file__).resolve()  # nopep8
 parent, root = file.parent, file.parents[1]  # nopep8
 sys.path.append(str(root))  # nopep8
@@ -19,11 +20,12 @@ class TestStringMethods(unittest.TestCase):
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
         self.aid_mngr = mngr.Aid(self.db_name)
-        self.aid_mngr.set_current_aid(self.db_name)
+        self.db_owner = "test_owner"
+        self.aid_mngr.connect_to_aid(self.db_name, self.db_owner)
 
     def tearDown(self):
         try:
-            self.aid_mngr.set_current_aid(self.db_name)
+            self.aid_mngr.connect_to_aid(self.db_name, self.db_owner)
             self.aid_mngr.delete_cur_aid()
             os.remove(self.db_path)
         except OSError:
@@ -31,7 +33,7 @@ class TestStringMethods(unittest.TestCase):
 
     def test_create_empty_aid(self):
         start_num_of_aids = self.aid_mngr.get_number_of_aids()
-        num_of_meds = self.aid_mngr.set_current_aid('test2')
+        num_of_meds = self.aid_mngr.connect_to_aid('test2', 'test_owner2')
         self.assertEqual(
             0, num_of_meds, "Aid manager return incorrect number of meds in aid")
         cur_num_of_aids = self.aid_mngr.get_number_of_aids()
@@ -41,7 +43,7 @@ class TestStringMethods(unittest.TestCase):
 
     def test_delete_empty_aid(self):
         start_num_of_aids = self.aid_mngr.get_number_of_aids()
-        self.aid_mngr.set_current_aid('test_to_del')
+        self.aid_mngr.connect_to_aid('test_to_del', 'owner_del')
         add_aids_num = self.aid_mngr.get_number_of_aids()
 
         self.assertEqual(1, add_aids_num - start_num_of_aids,
@@ -102,14 +104,14 @@ class TestStringMethods(unittest.TestCase):
                          med['quantity'], "The result quantity must be sum")
 
     def test_find_med_by_name(self):
-        id = self.aid_mngr.add_med('my_name3', 1, 'my_category', 'box_name',
-                                   datetime.datetime.now())
+        med_id = self.aid_mngr.add_med('my_name3', 1, 'my_category', 'box_name',
+                                       datetime.datetime.now())
         none_existing = self.aid_mngr.get_meds_by_name('unexisting')
         self.assertIsNone(none_existing)
 
         existing = self.aid_mngr.get_meds_by_name('my_name3')
         self.assertEqual(
-            id, existing[0]['id'], 'Id of created and found must be the same')
+            med_id, existing[0]['id'], 'Id of created and found must be the same')
 
     def test_category_list(self):
         meds_id = [self.aid_mngr.add_med('my_name3', 1, 'my_category', 'box_name',
@@ -132,7 +134,7 @@ class TestStringMethods(unittest.TestCase):
 
         categories = self.aid_mngr.get_all_categories()
         self.assertCountEqual(
-            categories, set(['my_category', 'my_other_category']), "Expected two category in test")
+            categories, {'my_category', 'my_other_category'}, "Expected two category in test")
 
     def test_validation_of_date(self):
         old_med = [self.aid_mngr.add_med('my_name3', 1, 'my_category', 'box_name',
@@ -142,8 +144,7 @@ class TestStringMethods(unittest.TestCase):
                               datetime.datetime(3022, 12, 25))
         self.aid_mngr.add_med('my_name1', 1, 'my_category', 'box_name')
         res = self.aid_mngr.get_invalid_meds()
-        self.assertEqual(self.aid_mngr.get_number_of_meds(
-        ), 3, "Must be 3 elements in current aid")
+        self.assertEqual(self.aid_mngr.get_number_of_meds(), 3, "Must be 3 elements in current aid")
         res_ids = [v['id'] for v in res]
         self.assertCountEqual(old_med, res_ids, "Must be only one invalid med")
 
@@ -161,7 +162,7 @@ class TestStringMethods(unittest.TestCase):
 
         self.assertTrue(os.path.exists(csv_path_exp))
 
-        self.aid_mngr.set_current_aid("new_test")
+        self.aid_mngr.connect_to_aid("new_test", 'new_owner')
         meds_from_export = self.aid_mngr.import_aid_from_csv(csv_path_exp)
 
         self.assertTrue(len(meds) == len(meds_from_export))
@@ -180,7 +181,8 @@ class TestStringMethods(unittest.TestCase):
 
     def test_invalid_arg_med(self):
         self.assertRaises(Exception, self.aid_mngr.add_med, ('my_name2', 1, 'my_category', 'box_name',
-                                                             datetime.date(3022, 12, 25)), "Expected error for incorrect data type")
+                                                             datetime.date(3022, 12, 25)),
+                          "Expected error for incorrect data type")
 
 
 if __name__ == '__main__':

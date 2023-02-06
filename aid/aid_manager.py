@@ -3,9 +3,8 @@ import os
 import uuid
 import csv
 import logging
-from datetime import datetime, date
+from datetime import datetime
 from re import sub
-
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -21,6 +20,7 @@ class Aid:
     def __init__(self, db_name='aid.db'):
         self.curr_id = None
         self.curr_kit_name = None
+        self.curr_kit_owner = None
         self.schema_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 'schema.sql')
 
@@ -62,24 +62,28 @@ class Aid:
     def get_db_path(self):
         return self.db_path
 
-    def set_current_aid(self, name):
-        self.curr_id = self._get_aid_id(name)
+    def connect_to_aid(self, name: str, owner: str):
+        self.curr_id = self._get_aid_id(name, owner)
         self.curr_kit_name = name
+        self.curr_kit_owner = owner
         if self.curr_id is None:
-            self._create_new_aid(name)
-            self.curr_id = self._get_aid_id(name)
+            self._create_new_aid(name, owner)
+            self.curr_id = self._get_aid_id(name, owner)
         return self.get_number_of_meds()
 
-    def get_aids(self):
-        db_resp = self.db.execute("SELECT name from aid")
+    def get_aids(self, owner: str = None):
+        if owner is None:
+            db_resp = self.db.execute("SELECT name from aid")
+        else:
+            db_resp = self.db.execute("SELECT name from aid WHERE owner is ?", [owner])
         els = db_resp.fetchall()
         return None if len(els) == 0 else els
 
-    def _get_aid_id(self, aid_name):
-        db_resp = self.db.execute("SELECT id from aid WHERE name is ?",
-                                  [aid_name])
-        id = db_resp.fetchall()
-        return None if len(id) == 0 else id[0]['id']
+    def _get_aid_id(self, aid_name: str, owner: str):
+        db_resp = self.db.execute("SELECT id from aid WHERE name is ? AND owner is ?",
+                                  [aid_name, owner])
+        aid_id = db_resp.fetchall()
+        return None if len(aid_id) == 0 else aid_id[0]['id']
 
     def get_number_of_meds(self):
         if self.curr_id is None:
@@ -90,7 +94,8 @@ class Aid:
         num_of_els = db_resp.fetchall()
         return len(num_of_els)
 
-    def parse_date(self, date_text, full_date=False):
+    @staticmethod
+    def parse_date(date_text: str):
         try:
             # 09/9999
             v_date = datetime.strptime(date_text, '%m/%Y')
@@ -100,8 +105,8 @@ class Aid:
             v_date = datetime.strptime(date_text, '%Y-%m-%d %H:%M:%S')
             return v_date
 
-    def import_aid_from_csv(self, csv_path):
-        '''Format of CSV: Название,Срок годности,От чего,Местоположение,Количество'''
+    def import_aid_from_csv(self, csv_path: str):
+        """Format of CSV: Название,Срок годности,От чего,Местоположение,Количество"""
         if not os.path.exists(csv_path):
             raise Exception("Incorrect path to csv")
         res = []
@@ -114,7 +119,8 @@ class Aid:
                 try:
                     cur_line += 1
                     v_date = self.parse_date(row['Срок годности'])
-                    med_id = self.add_med(name=row['Название'], quantity=row['Количество'], category=row['От чего'],
+                    med_id = self.add_med(name=row['Название'], quantity=float(row['Количество']),
+                                          category=row['От чего'],
                                           box=row['Местоположение'], valid_date=v_date)
                     res.append(self.get_med_by_id(med_id))
                     logger.info(f"Imported row {cur_line}/{total_num}.{row}")
@@ -123,24 +129,26 @@ class Aid:
                         f"ERROR: Encountered error during parsing the row {row}\nError: {e}")
         return res
 
-    def export_aid_to_csv(self, csv_path):
+    def export_aid_to_csv(self, csv_path: str):
         meds = self.get_all_meds()
         with open(csv_path, 'w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',',
                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['Id лекарства', 'Название', 'Срок годности',
-                                'От чего', 'Местоположение', 'Количество', 'Id аптечки'])
+                                 'От чего', 'Местоположение', 'Количество', 'Id аптечки'])
             csv_writer.writerows(meds)
         logger.info(
             f"Exported {len(meds)} rows from aid kit {self.curr_kit_name}")
 
+    @staticmethod
     def get_uuid() -> str:
         return str(uuid.uuid1()).replace('-', '')
 
-    def _create_new_aid(self, name):
-        id = Aid.get_uuid()
-        logger.info(f"Creation of new first aid kit with id {id}")
-        self.db.execute("INSERT INTO aid (id, name) VALUES (?,?)", [id, name])
+    def _create_new_aid(self, name: str, owner: str):
+        aid_id = Aid.get_uuid()
+        logger.info(f"Creation of new first aid kit with id {aid_id}")
+        self.db.execute("INSERT INTO aid (id, owner, name) VALUES (?,?,?)", [
+            aid_id, owner, name])
         self.db.commit()
 
     def is_initialized(self):
@@ -156,9 +164,9 @@ class Aid:
         num_of_els = db_resp.fetchall()
         return len(num_of_els)
 
-    def _delete_aid(self, id):
-        logger.info(f"Deletion of aid kid with id {id}")
-        self.db.execute("DELETE FROM aid WHERE id = ?", [id])
+    def _delete_aid(self, aid_id: str):
+        logger.info(f"Deletion of aid kid with id {aid_id}")
+        self.db.execute("DELETE FROM aid WHERE id = ?", [aid_id])
         self.db.commit()
 
     def add_med(self, name: str, quantity: float, category: str,
@@ -181,7 +189,7 @@ class Aid:
         # else create new one
         id = Aid.get_uuid()
         sql_req = "INSERT INTO meds (id,name,valid,category,box,quantity,aidid) " \
-            "values (:id, :name, :valid, :category, :box, :quantity, :aidid)"
+                  "values (:id, :name, :valid, :category, :box, :quantity, :aidid)"
         category = category.lower()
         kwargs = {
             "id": id,
@@ -196,17 +204,16 @@ class Aid:
         self.db.commit()
         return id
 
-    def get_med_by_full_desc(self, name: str, box: str, valid_date: date) -> str:
+    def get_med_by_full_desc(self, name: str, box: str, valid_date: datetime):
         name = name.lower()
-        med = None
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name is ? AND box is ? AND valid is ?",
                                   [self.curr_id, name, box, valid_date])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med[0]
 
-    def delete_med(self, id):
-        logger.info(f"Deletion of med with id '{id}'")
-        self.db.execute("DELETE FROM meds WHERE id = ?", [id])
+    def delete_med(self, med_id):
+        logger.info(f"Deletion of med with id '{med_id}'")
+        self.db.execute("DELETE FROM meds WHERE id = ?", [med_id])
         self.db.commit()
 
     def get_meds_by_name(self, name):
@@ -217,10 +224,10 @@ class Aid:
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
 
-    def get_med_by_id(self, id):
-        logger.info(f"Attempt to search med by id '{id}'")
+    def get_med_by_id(self, med_id):
+        logger.info(f"Attempt to search med by id '{med_id}'")
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND id is ?",
-                                  [self.curr_id, id])
+                                  [self.curr_id, med_id])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med[0]
 
@@ -237,14 +244,14 @@ class Aid:
             if len(c_str) == 0:
                 result.add(str(c_str).strip())
             else:
-                for sub in c_str_spl:
-                    result.add(str(sub).strip())
+                for sub_c in c_str_spl:
+                    result.add(str(sub_c).strip())
         return result
 
     def get_meds_by_category(self, category: str):
         category = category.lower()
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND category LIKE ?",
-                                  [self.curr_id, '%'+category+'%'])
+                                  [self.curr_id, '%' + category + '%'])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
 
@@ -256,14 +263,14 @@ class Aid:
             self.delete_med(med['id'])
         else:
             self.db.execute("UPDATE meds SET quantity = ? WHERE id = ?", [
-                            new_quan, med['id']])
+                new_quan, med['id']])
             self.db.commit()
 
     def increase_med(self, med, num: float):
         new_quan = num + med['quantity']
         logger.info(f"Set new quantity {new_quan} to med {med['id']}")
         self.db.execute("UPDATE meds SET quantity = ? WHERE id = ?", [
-                        new_quan, med['id']])
+            new_quan, med['id']])
         self.db.commit()
 
     def get_all_meds(self):

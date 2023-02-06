@@ -58,8 +58,8 @@ async def send_big_message(update: Update, msg: str):
 
 
 def get_user_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user['id']
-    return context.user_data[user]
+    chat_id = update.effective_chat.id
+    return context.user_data[chat_id]
 
 
 async def is_not_initialized(operation_ru: str, operation_en: str, update: Update) -> bool:
@@ -75,13 +75,13 @@ async def is_not_initialized(operation_ru: str, operation_en: str, update: Updat
 def clear_up(update: object, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None:
         return
-    user = update.message.from_user['id']
-    if user not in context.user_data:
+    chat_id = update.effective_chat.id
+    if chat_id not in context.user_data:
         return
-    if 'med' in context.user_data[user]:
-        del context.user_data[user]['med']
-    if 'take' in context.user_data[user]:
-        del context.user_data[user]['take']
+    if 'med' in context.user_data[chat_id]:
+        del context.user_data[chat_id]['med']
+    if 'take' in context.user_data[chat_id]:
+        del context.user_data[chat_id]['take']
 
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -104,12 +104,17 @@ async def list_med(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_not_initialized("вывод лекарств", "list med", update):
         return ConversationHandler.END
     meds = aids.get_all_meds()
-    msg_meds = ""
-    for m in meds:
-        msg_meds += "\n" + mngr.Aid.get_med_msg(m)
-    num_of_found = len(meds)
-    logger.info(f"Listing all {num_of_found} meds")
-    await send_big_message(update, f"Твоя аптечка содержит {num_of_found} лекарств. {msg_meds}")
+    msg = ""
+    if meds is None:
+        msg = "Твоя аптечка не содержит лекарств. Используй команду /add_med для того чтобы добавить новое лекарство"
+    else:
+        msg_meds = ""
+        for m in meds:
+            msg_meds += "\n" + mngr.Aid.get_med_msg(m)
+        num_of_found = len(meds)
+        logger.info(f"Listing all {num_of_found} meds")
+        msg = f"Твоя аптечка содержит {num_of_found} лекарств. {msg_meds}"
+    await send_big_message(update, msg)
     await help_reply(update, context)
     return ConversationHandler.END
 
@@ -118,12 +123,16 @@ async def list_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_not_initialized("вывод категорий лекарств", "list med category", update):
         return ConversationHandler.END
     categories = aids.get_all_categories()
-    msg_cat = ""
-    for c in categories:
-        msg_cat += "\n" + c
-    num_of_found = len(categories)
-    logger.info(f"Listing all {num_of_found} categories")
-    await send_big_message(update, f"Твоя аптечка содержит {num_of_found} категорий. {msg_cat}")
+    if categories is None:
+        msg = "Твоя аптечка не содержит лекарств.\n Используй команду /add_med для того чтобы добавить новое лекарство"
+    else:
+        msg_cat = ""
+        for c in categories:
+            msg_cat += "\n" + c
+        num_of_found = len(categories)
+        logger.info(f"Listing all {num_of_found} categories")
+        msg = f"Твоя аптечка содержит {num_of_found} категорий. {msg_cat}"
+    await send_big_message(update, msg)
     await help_reply(update, context)
     return ConversationHandler.END
 
@@ -335,8 +344,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def add_med(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if await is_not_initialized("добавление лекарств", "add med", update):
         return ConversationHandler.END
-
-    context.user_data[update.message.from_user['id']] = {'med': {}}
+    chat_id = update.effective_chat.id
+    context.user_data[chat_id] = {'med': {}}
     await update.message.reply_text(f"Давай добавим новое лекарство. Введи название лекарства")
     return MED_NAME
 
@@ -344,26 +353,27 @@ async def add_med(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def take_med(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if await is_not_initialized("взять лекарство", "take med", update):
         return ConversationHandler.END
-
-    context.user_data[update.message.from_user['id']] = {'take': {}}
+    chat_id = update.effective_chat.id
+    context.user_data[chat_id] = {'take': {}}
     await update.message.reply_text(f"Введи имя лекарства, которое ты хочешь взять")
     return TAKE_NAME
 
 
 async def process_take_med_few(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    decision_spl = update.message.text.split('\n')
-    id = None
-    for info in decision_spl:
-        if 'id:' in info.lower():
-            id = info.lower().strip().replace('id', '').replace(':', '')
-    if id is None:
+    query = update.callback_query
+    await query.answer()
+    med_id = None
+    med_spl = query.data.split(':')
+    if len(med_spl):
+        med_id = med_spl[1]
+    if med_id is None:
         logger.error("Unexpected input. Abort")
-        await update.message.reply_text(text="Некорректные входные данные. Операция отменена")
+        await update.callback_query.edit_message_text(text="Некорректные входные данные. Операция отменена")
         clear_up(update, context)
         return ConversationHandler.END
 
-    get_user_data(update, context)['take']['old_med'] = aids.get_med_by_id(id)
-    await update.message.reply_text("Теперь введи количество лекарства")
+    get_user_data(update, context)['take']['old_med'] = aids.get_med_by_id(med_id)
+    await update.callback_query.edit_message_text("Теперь введи количество лекарства")
     return TAKE_NUM
 
 
@@ -386,15 +396,19 @@ async def process_take_med_name(update: Update, context: ContextTypes.DEFAULT_TY
 
     logger.info(
         f"Take medicine: were found few meds for name {update.message.text}")
-    choices = []
+    full_choices = []
+    choices_line = []
     for m in meds:
-        choices.append(mngr.Aid.get_med_msg(m, True))
+        choices_line.append(InlineKeyboardButton(mngr.Aid.get_med_msg(m), callback_data=f"take_few:{m['id']}"))
+        if len(choices_line) >= MAX_LINE_BUTTON_LENGTH:
+            full_choices.append(choices_line)
+            choices_line = []
+    if len(choices_line):
+        full_choices.append(choices_line)
 
     await update.message.reply_text(
         f"ℹ️ Было найдено несколько лекарств с именем {update.message.text}. \n Выбери одно из них",
-        reply_markup=ReplyKeyboardMarkup(
-            [choices], one_time_keyboard=True, input_field_placeholder="Выбери одно лекарство?"
-        ),
+        reply_markup=InlineKeyboardMarkup(full_choices)
     )
 
     return TAKE_FEW
@@ -610,8 +624,7 @@ def init_handlers(app):
         states={
             TAKE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_take_med_name)],
             TAKE_NUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_take_med_quantity)],
-            TAKE_FEW: [MessageHandler(
-                filters.TEXT & ~filters.COMMAND, process_take_med_few)]
+            TAKE_FEW: [CallbackQueryHandler(process_take_med_few, pattern="^take_few:.*")]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )

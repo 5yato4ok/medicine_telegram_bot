@@ -108,7 +108,7 @@ async def list_med(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Listing all {num_of_found} meds")
     await send_big_message(update, f"Твоя аптечка содержит {num_of_found} лекарств. {msg_meds}")
     await help_reply(update, context)
-
+    return ConversationHandler.END
 
 async def list_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_not_initialized("вывод категорий лекарств", "list med category", update):
@@ -121,6 +121,7 @@ async def list_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Listing all {num_of_found} categories")
     await send_big_message(update, f"Твоя аптечка содержит {num_of_found} категорий. {msg_cat}")
     await help_reply(update, context)
+    return ConversationHandler.END
 
 
 async def process_search_by_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -197,7 +198,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 AID_CREATE_START, AID_CHOOSE_START, AID_CREATE, AID_CHOOSE = range(4)
 
 
-async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid_name):
+async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid_name)->int:
     chat_id = update.effective_chat.id
     aids.connect_to_aid(aid_name, str(chat_id))
     await context.bot.send_message(chat_id=chat_id, reply_markup=ReplyKeyboardRemove(),
@@ -205,6 +206,7 @@ async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid
     logger.info(f"Setting first aid kit {aid_name} as current one successfuly")
 
     await help_reply(update, context)
+    return ConversationHandler.END
 
 
 async def init_create_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -225,6 +227,7 @@ async def process_choose_aid(update: Update, context: ContextTypes.DEFAULT_TYPE)
     aid_name = query.data
     aid_name = aid_name.replace('aid_name:', '')
     await connect_to_aid(update, context, aid_name)
+    return ConversationHandler.END
 
 
 async def init_choose_existing_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -273,36 +276,41 @@ async def delete_kit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     count = aids.get_number_of_meds()
     kit_name = aids.get_cur_aid_name()
 
-    reply_keyboard = [["Да", "Нет"]]
+    reply_keyboard = [
+        [
+            InlineKeyboardButton("Да", callback_data="delete_yes"),
+            InlineKeyboardButton("Нет", callback_data="delete_no")
+        ]
+    ]
 
     await update.message.reply_text(
         f"Я собираюсь удалить аптечку {kit_name}, которая содержит {count} лекарств.\n\n Ты уверен?",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Ты уверен?"
-        ),
+        reply_markup=InlineKeyboardMarkup(reply_keyboard),
     )
 
     return AGREE
 
 
-async def process_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    decision = update.message.text
+async def process_delete_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
     kit_name = aids.get_cur_aid_name()
-    if decision.lower() == "да":
-        aids.delete_cur_aid()
-        logger.info("Received confirmation.")
-        logger.info(f"Deletion of {kit_name} completed successfuly")
-        await update.message.reply_text(
-            text=f"✅ Аптечка {kit_name} успешно удалена.\nВызови комнаду /start чтобы начать новую сессию.",
-            reply_markup=ReplyKeyboardRemove())
-    else:
-        logger.info(
-            f"Confirmation was not received. Abort deletion of first aid kit")
-        await update.message.reply_text(
-            text=f"❌ Подтвтерждение процесса удаления не было получено. Удаление аптечки {kit_name} приостановлено",
-            reply_markup=ReplyKeyboardRemove())
-        await help_reply(update, context)
+    aids.delete_cur_aid()
+    logger.info("Received confirmation.")
+    logger.info(f"Deletion of {kit_name} completed successfuly")
+    await update.callback_query.edit_message_text(
+        text=f"✅ Аптечка {kit_name} успешно удалена.\nВызови комнаду /start чтобы начать новую сессию.")
+    return ConversationHandler.END
 
+async def process_delete_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    kit_name = aids.get_cur_aid_name()
+    logger.info(
+        f"Confirmation was not received. Abort deletion of first aid kit")
+    await update.callback_query.edit_message_text(
+        text=f"❌ Подтвтерждение процесса удаления не было получено. Удаление аптечки {kit_name} приостановлено")
+    await help_reply(update, context)
     return ConversationHandler.END
 
 
@@ -546,8 +554,8 @@ def init_handlers(app):
     delete_aid_handler = ConversationHandler(
         entry_points=[CommandHandler("delete_aid_kit", delete_kit)],
         states={
-            AGREE: [MessageHandler(filters.Regex(
-                "^(Да|Нет|да|нет)$"), process_delete)]
+            AGREE: [CallbackQueryHandler(process_delete_yes, pattern="^delete_yes$"),
+                    CallbackQueryHandler(process_delete_no, pattern="^delete_no$")]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )

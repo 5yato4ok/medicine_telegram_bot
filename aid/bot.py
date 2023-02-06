@@ -87,13 +87,16 @@ def clear_up(update: object, context: ContextTypes.DEFAULT_TYPE):
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if await is_not_initialized("поиск", "search", update):
         return ConversationHandler.END
-    reply_keyboard = [["Поиск по имени", "Поиск по категории лекарcтва"]]
-    await update.message.reply_text(
-        f"Произвести поиск лекарcтва по имени или по категории лекарства.",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Выбери что-то одно"
-        ),
-    )
+
+    reply_keyboard = [
+        [
+            InlineKeyboardButton("Поиск по имени", callback_data="search_name"),
+            InlineKeyboardButton("Поиск по категории лекарcтва", callback_data="search_cat")
+        ]
+    ]
+
+    await update.message.reply_text(f"Произвести поиск лекарcтва по имени или по категории лекарства.",
+                                    reply_markup=InlineKeyboardMarkup(reply_keyboard))
     return SEARCH_INIT
 
 
@@ -109,6 +112,7 @@ async def list_med(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_big_message(update, f"Твоя аптечка содержит {num_of_found} лекарств. {msg_meds}")
     await help_reply(update, context)
     return ConversationHandler.END
+
 
 async def list_med_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_not_initialized("вывод категорий лекарств", "list med category", update):
@@ -166,16 +170,16 @@ async def process_search_by_name(update: Update, context: ContextTypes.DEFAULT_T
     return ConversationHandler.END
 
 
-async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    search_by_name = "имени" in update.message.text.lower()
-    if search_by_name:
-        await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                       text=f"Введи имя лекарства.\n Пример: пенталгин")
-        return SEARCH_NAME
-    else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=ReplyKeyboardRemove(),
-                                       text=f"Введи имя категории.\n Пример: ОРВИ")
-        return SEARCH_CATEGORY
+async def dialog_search_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=f"Введи имя лекарства.\n Пример: пенталгин")
+    return SEARCH_NAME
+
+
+async def dialog_search_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=f"Введи имя категории.\n Пример: ОРВИ")
+    return SEARCH_CATEGORY
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -198,7 +202,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 AID_CREATE_START, AID_CHOOSE_START, AID_CREATE, AID_CHOOSE = range(4)
 
 
-async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid_name)->int:
+async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid_name) -> int:
     chat_id = update.effective_chat.id
     aids.connect_to_aid(aid_name, str(chat_id))
     await context.bot.send_message(chat_id=chat_id, reply_markup=ReplyKeyboardRemove(),
@@ -301,6 +305,7 @@ async def process_delete_yes(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.callback_query.edit_message_text(
         text=f"✅ Аптечка {kit_name} успешно удалена.\nВызови комнаду /start чтобы начать новую сессию.")
     return ConversationHandler.END
+
 
 async def process_delete_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -590,10 +595,10 @@ def init_handlers(app):
     search_med_handler = ConversationHandler(
         entry_points=[CommandHandler("search", search)],
         states={
-            SEARCH_INIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_search)],
+            SEARCH_INIT: [CallbackQueryHandler(dialog_search_name, pattern="^search_name$"),
+                          CallbackQueryHandler(dialog_search_category, pattern="^search_cat$")],
             SEARCH_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_search_by_name)],
-            SEARCH_CATEGORY: [MessageHandler(
-                filters.TEXT & ~filters.COMMAND, process_search_by_category)]
+            SEARCH_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_search_by_category)]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )

@@ -251,7 +251,7 @@ class Aid:
     def reduce_med(self, num: float, med):
         new_quan = med['quantity'] - num
         logger.info(
-            f"Setting new quantity {new_quan} of med with id {med[id]}")
+            f"Setting new quantity {new_quan} of med with id {med['id']}")
         if new_quan <= 0:
             self.delete_med(med['id'])
         else:

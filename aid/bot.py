@@ -39,7 +39,7 @@ AGREE, INIT_KIT, MED_NAME, MED_DATE, \
 download_path = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), 'downloads')
 file_size_limit = 30 * 1024 * 2024
-MSG_MAX_SIZE = 1500
+MSG_MAX_SIZE = 4000
 MAX_LINE_BUTTON_LENGTH = 3
 DEVELOPER_CHAT_ID = 185374927
 
@@ -121,7 +121,6 @@ async def list_med(update: Update, context: ContextTypes.DEFAULT_TYPE):
         num_of_found = len(meds)
         logger.info(f"Listing all {num_of_found} meds")
         msg = f"Твоя аптечка содержит {num_of_found} лекарств. {msg_meds}"
-    err = 1 / 0
     await send_message(msg, update.message.reply_text)
     await help_reply(update, context)
     return ConversationHandler.END
@@ -291,7 +290,7 @@ async def help_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_message(
         f"Текущее количество лекарств в твоей аптечке <i><b>{html.escape(aids.get_cur_aid_name())}</b></i> : "
         f"{aids.get_number_of_meds()} \n\n" + msg,
-        context.bot.send_message, parse_mode=ParseMode.HTML)
+        context.bot.send_message, chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
 
 
 async def delete_kit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

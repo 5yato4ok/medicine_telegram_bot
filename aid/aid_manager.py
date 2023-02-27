@@ -73,9 +73,9 @@ class Aid:
 
     def get_aids(self, owner: str = None):
         if owner is None:
-            db_resp = self.db.execute("SELECT name from aid")
+            db_resp = self.db.execute("SELECT name from aid ORDER by name")
         else:
-            db_resp = self.db.execute("SELECT name from aid WHERE owner is ?", [owner])
+            db_resp = self.db.execute("SELECT name from aid WHERE owner is ? ORDER by name", [owner])
         els = db_resp.fetchall()
         return None if len(els) == 0 else els
 
@@ -110,9 +110,9 @@ class Aid:
         if not os.path.exists(csv_path):
             raise Exception("Incorrect path to csv")
         res = []
-        with open(csv_path, 'r') as csv_file:
+        with open(csv_path, 'r', encoding='utf-8') as csv_file:
             total_num = len(list(csv.reader(csv_file)))
-        with open(csv_path, 'r') as csv_file:
+        with open(csv_path, 'r', encoding='utf-8') as csv_file:
             reader = csv.DictReader(csv_file)
             cur_line = 0
             for row in reader:
@@ -246,11 +246,13 @@ class Aid:
             else:
                 for sub_c in c_str_spl:
                     result.add(str(sub_c).strip())
+        result = list(result)
+        result.sort()
         return result
 
     def get_meds_by_category(self, category: str):
         category = category.lower()
-        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND category LIKE ?",
+        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND category LIKE ? ORDER BY name",
                                   [self.curr_id, '%' + category + '%'])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
@@ -274,7 +276,7 @@ class Aid:
         self.db.commit()
 
     def get_all_meds(self):
-        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ?",
+        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? ORDER BY name ASC",
                                   [self.curr_id])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med

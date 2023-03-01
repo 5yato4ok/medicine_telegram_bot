@@ -1,4 +1,5 @@
 import sys
+import os
 import logging
 import html
 import json
@@ -188,13 +189,13 @@ async def process_search_by_name(update: Update, context: ContextTypes.DEFAULT_T
 
 async def dialog_search_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
-    await send_message(f"Введи имя лекарства.\n Пример: пенталгин", update.callback_query.edit_message_text)
+    await send_message(f"Введи имя лекарства.\n Пример: пенталгин", update.callback_query.message.reply_text)
     return SEARCH_NAME
 
 
 async def dialog_search_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
-    await send_message(f"Введи имя категории.\n Пример: ОРВИ", update.callback_query.edit_message_text)
+    await send_message(f"Введи имя категории.\n Пример: ОРВИ", update.callback_query.message.reply_text)
     return SEARCH_CATEGORY
 
 
@@ -231,7 +232,7 @@ async def connect_to_aid(update: Update, context: ContextTypes.DEFAULT_TYPE, aid
 
 async def init_create_aid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
-    await send_message("Введи имя новой аптечки", update.callback_query.edit_message_text)
+    await send_message("Введи имя новой аптечки", update.callback_query.message.reply_text)
     return AID_CREATE
 
 
@@ -263,13 +264,14 @@ async def init_choose_existing_aid(update: Update, context: ContextTypes.DEFAULT
                 user_aids_line = []
         if len(user_aids_line) != 0:
             res_aids_name.append(user_aids_line)
-        await send_message("Выбери одну из существующих аптечек", update.callback_query.edit_message_text,
+
+        await send_message("Выбери одну из существующих аптечек", update.callback_query.message.reply_text,
                            reply_markup=InlineKeyboardMarkup(res_aids_name))
 
         return AID_CHOOSE
     else:
         await send_message("Сейчас нету существующих аптечек. Введи имя новой аптечки",
-                           update.callback_query.edit_message_text)
+                           update.callback_query.message.reply_text)
         return AID_CREATE
 
 
@@ -320,7 +322,7 @@ async def process_delete_yes(update: Update, context: ContextTypes.DEFAULT_TYPE)
     logger.info("Received confirmation.")
     logger.info(f"Deletion of {kit_name} completed successfuly")
     await send_message(f"✅ Аптечка {kit_name} успешно удалена.\nВызови комнаду /start чтобы начать новую сессию.",
-                       update.callback_query.edit_message_text)
+                       update.callback_query.message.reply_text)
     return ConversationHandler.END
 
 
@@ -331,7 +333,7 @@ async def process_delete_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Confirmation was not received. Abort deletion of first aid kit")
     await send_message(
         f"❌ Подтвтерждение процесса удаления не было получено. Удаление аптечки {kit_name} приостановлено",
-        update.callback_query.edit_message_text)
+        update.callback_query.message.reply_text)
     await help_reply(update, context)
     return ConversationHandler.END
 
@@ -374,12 +376,12 @@ async def process_take_med_few(update: Update, context: ContextTypes.DEFAULT_TYP
         med_id = med_spl[1]
     if med_id is None:
         logger.error("Unexpected input. Abort")
-        await send_message("Некорректные входные данные. Операция отменена", update.callback_query.edit_message_text)
+        await send_message("Некорректные входные данные. Операция отменена", update.callback_query.message.reply_text)
         clear_up(update, context)
         return ConversationHandler.END
 
     get_user_data(update, context)['take']['old_med'] = aids.get_med_by_id(med_id)
-    await send_message("Теперь введи количество лекарства", update.callback_query.edit_message_text)
+    await send_message("Теперь введи количество лекарства", update.callback_query.message.reply_text)
     return TAKE_NUM
 
 
@@ -667,8 +669,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 if __name__ == '__main__':
     # TODO: move token to secure place
-    real = '5898027021:AAG-et5fU_5nONWeaFjkbdbtDSTSqi0G_50'
-    test = '6080292253:AAHlt5TQojPiEKEz8bI4A7CU6F7BPqPPWRE'
+    real =  os.environ["MED_BOT_TOKEN"]
+    test = os.environ["MED_BOT_TEST_TOKEN"]
     app = ApplicationBuilder().token(test).build()
     init_handlers(app)
     app.add_error_handler(error_handler)

@@ -26,14 +26,14 @@ async def create_new_kit(conv, aid_name):
 
 
 @pytest.mark.anyio
-async def test_start(empty_conv):
+async def test_bot_start(empty_conv):
     resp: Message = await empty_conv.get_response()
     assert resp.button_count != 0
     assert "test_med_nika_bot" in resp.chat.username
 
 
 @pytest.mark.anyio
-async def test_connect_delete_to_kit(empty_conv):
+async def test_bot_connect_delete_to_kit(empty_conv):
     # create additional kit
     aid_name2 = "my_test2"
     resp: Message = await create_new_kit(empty_conv, aid_name2)
@@ -105,3 +105,34 @@ async def test_connect_delete_to_kit(empty_conv):
     await resp.click(data=b'old')
     resp = await empty_conv.get_response(timeout=5)
     assert f"Сейчас нету существующих аптечек." in resp.raw_text
+
+@pytest.mark.anyio
+async def test_bot_import_export(conv_with_connection):
+    pass
+
+@pytest.mark.anyio
+async def test_bot_search_name(conv_with_data):
+    pass
+
+
+@pytest.mark.anyio
+async def test_bot_search_category(conv_with_data):
+    pass
+
+@pytest.mark.anyio
+async def test_bot_add_new_med(conv_with_data):
+    #check incorrect date
+    #check incorrect quantity
+    pass
+
+@pytest.mark.anyio
+async def test_bot_list_med(conv_with_data):
+    #check incorrect date
+    #check incorrect quantity
+    pass
+
+@pytest.mark.anyio
+async def test_bot_take_med(conv_with_data):
+    #check incorrect date
+    #check incorrect quantity
+    pass

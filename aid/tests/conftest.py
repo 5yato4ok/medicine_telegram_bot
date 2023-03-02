@@ -53,6 +53,18 @@ async def conv_with_connection():
         yield conv
         await delete_cur_kit(conv)
 
+@pytest.fixture(scope="function")
+async def conv_with_data():
+    client = TelegramClient(
+        StringSession(session_str), api_id, api_hash,
+        sequential_updates=True
+    )
+    await client.connect()
+    async with client.conversation("@test_med_nika_bot") as conv:
+        await create_new_kit(conv, "test")
+        #import csv
+        yield conv
+        await delete_cur_kit(conv)
 
 @pytest.fixture(scope="function")
 async def empty_conv():

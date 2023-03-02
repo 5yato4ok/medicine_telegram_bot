@@ -34,6 +34,11 @@ class Aid:
             self.db.cursor().executescript(f.read())
             self.db.commit()
 
+    def clear_db(self):
+        if os.path.exists(self.db_path):
+            self.db.close()
+            os.remove(self.db_path)
+
     @staticmethod
     def get_med_msg(med, print_id: bool = False, print_aid_id: bool = False):
         if med is None:
@@ -129,9 +134,9 @@ class Aid:
                         f"ERROR: Encountered error during parsing the row {row}\nError: {e}")
         return res
 
-    def export_aid_to_csv(self, csv_path: str):
-        meds = self.get_all_meds()
-        with open(csv_path, 'w') as csv_file:
+    def export_aid_to_csv(self, csv_path: str, sorted: bool = True):
+        meds = self.get_all_meds(sorted)
+        with open(csv_path, 'w', encoding='utf-8') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',',
                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['Id лекарства', 'Название', 'Срок годности',
@@ -275,9 +280,9 @@ class Aid:
             new_quan, med['id']])
         self.db.commit()
 
-    def get_all_meds(self):
-        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? ORDER BY name ASC",
-                                  [self.curr_id])
+    def get_all_meds(self, sort: bool = True):
+        query = "SELECT * from meds WHERE aidid is ? ORDER BY name ASC" if sort else "SELECT * from meds WHERE aidid is ?"
+        db_resp = self.db.execute(query, [self.curr_id])
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
 

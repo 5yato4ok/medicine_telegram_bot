@@ -5,7 +5,7 @@ This a telegram bot, that will help you to manage the content of your first aid 
 
 Bot simply provides control over content of table from sqlite database. Each chat has control over its own first aid kits.
 
-The content of first aid kit could be described as csv file. Check file [input_example.csv](aid/input_example.csv) as example of input.
+The content of first aid kit could be described as csv file. Check file [input_example.csv](aid/tests/input_example.csv) as example of input.
 
 Also, medicine could be added one by one.
  

@@ -7,16 +7,16 @@ from pathlib import Path
 
 file = Path(__file__).resolve()  # nopep8
 parent, root = file.parent, file.parents[1]  # nopep8
+sys.path.append(str(parent))  # nopep8
 sys.path.append(str(root))  # nopep8
 
 from aid import aid_manager as mngr
 
 
-class TestStringMethods(unittest.TestCase):
+class TestAidKitManager(unittest.TestCase):
     def setUp(self):
         self.db_name = f"test_{self._testMethodName}.db"
-        self.db_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), self.db_name)
+        self.db_path = os.path.join(root, self.db_name)
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
         self.aid_mngr = mngr.Aid(self.db_name)
@@ -27,8 +27,9 @@ class TestStringMethods(unittest.TestCase):
         try:
             self.aid_mngr.connect_to_aid(self.db_name, self.db_owner)
             self.aid_mngr.delete_cur_aid()
-            os.remove(self.db_path)
-        except OSError:
+            self.aid_mngr.clear_db()
+        except OSError as e:
+            print(e)
             pass
 
     def test_create_empty_aid(self):
@@ -158,7 +159,7 @@ class TestStringMethods(unittest.TestCase):
         meds = self.aid_mngr.import_aid_from_csv(csv_path)
         self.assertEqual(len(meds), 59)
 
-        self.aid_mngr.export_aid_to_csv(csv_path_exp)
+        self.aid_mngr.export_aid_to_csv(csv_path_exp, sorted=False)
 
         self.assertTrue(os.path.exists(csv_path_exp))
 

@@ -29,12 +29,15 @@ python3 bot.py
 
 ## Running Tests
 
-To run tests, run the following command
+To run tests of backend Aid Manager, run the following command
 
 ```bash
-  python3 aid/aid_test.py
+  python3 aid/tests/aid_test.py
 ```
-
+To run tests of bot itself, you need firstly to launch bot with test token and then launch tests
+```bash
+  pytest aid/tests/bot_test.py
+```
 
 ## Full list of bot commands
 

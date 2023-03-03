@@ -170,6 +170,8 @@ async def process_search_by_name(update: Update, context: ContextTypes.DEFAULT_T
     name = update.message.text
     logger.info(f"Attempt to search med with name {name} in first aid kit.")
     meds = aids.get_meds_by_name(name)
+    if meds is None:
+        meds = aids.get_similar_meds_by_name(name)
 
     if meds is not None:
         msg_meds = ""

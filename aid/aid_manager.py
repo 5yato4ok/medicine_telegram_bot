@@ -229,6 +229,14 @@ class Aid:
         med = db_resp.fetchall()
         return None if len(med) == 0 else med
 
+    def get_similar_meds_by_name(self, name):
+        logger.info(f"Attempt to search med by name '{name}'")
+        name = name.lower()
+        db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND name LIKE ?",
+                                  [self.curr_id, name])
+        med = db_resp.fetchall()
+        return None if len(med) == 0 else med
+
     def get_med_by_id(self, med_id):
         logger.info(f"Attempt to search med by id '{med_id}'")
         db_resp = self.db.execute("SELECT * from meds WHERE aidid is ? AND id is ?",

@@ -1,8 +1,9 @@
 import pytest
 from time import sleep
+import os
 from telethon.tl.custom.message import Message
 
-SLEEP_SEC = 4
+SLEEP_SEC = 3
 
 
 async def delete_cur_kit(conv, click=b'delete_yes'):
@@ -106,33 +107,228 @@ async def test_bot_connect_delete_to_kit(empty_conv):
     resp = await empty_conv.get_response(timeout=5)
     assert f"Сейчас нету существующих аптечек." in resp.raw_text
 
+
 @pytest.mark.anyio
 async def test_bot_import_export(conv_with_connection):
-    pass
+    # check import
+    sleep(SLEEP_SEC)
+    await conv_with_connection.send_message("/import_csv")
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Давай добавим лекарства из твоего файла" in resp.raw_text
+    import_csv_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 'input_example.csv')
+    csv_path_exp = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 'test_export.csv')
+    num_of_meds = 59
+    await conv_with_connection.send_file(import_csv_path)
+    resp: Message = await conv_with_connection.get_response(timeout=15)
+    assert f"Было успешно загружено {num_of_meds} лекарств" in resp.raw_text
+
+    # check export
+    await conv_with_connection.send_message("/export_csv")
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    await resp.download_media(file=csv_path_exp)
+    sleep(4)
+    assert os.path.exists(csv_path_exp)
+    with open(csv_path_exp, 'r', encoding='utf-8') as exp:
+        lines = [line for line in exp.readlines() if line.strip() != '']
+        assert len(lines) == num_of_meds + 1
+
+    os.remove(csv_path_exp)
+
 
 @pytest.mark.anyio
 async def test_bot_search_name(conv_with_data):
-    pass
+    await conv_with_data.send_message('/search')
+
+    resp: Message = await conv_with_data.get_response(timeout=5)
+    assert "Произвести поиск лекарcтва по имени" in resp.raw_text
+    await resp.click(data=b'search_name')
+    resp = await conv_with_data.get_response(timeout=5)
+    assert 'Введи имя лекарства.' in resp.raw_text
+    await conv_with_data.send_message('АнвиМакс')
+    resp = await conv_with_data.get_response(timeout=5)
+    assert 'Было найдено 1 лекарств.' in resp.raw_text
+
+    await conv_with_data.send_message('/search')
+    resp: Message = await conv_with_data.get_response(timeout=5)
+    await resp.click(data=b'search_name')
+    resp = await conv_with_data.get_response(timeout=5)
+    await conv_with_data.send_message('unexisting')
+    resp = await conv_with_data.get_response(timeout=5)
+    assert 'не было найдено.' in resp.raw_text
 
 
 @pytest.mark.anyio
 async def test_bot_search_category(conv_with_data):
-    pass
+    sleep(SLEEP_SEC)
+    await conv_with_data.send_message('/search')
+
+    resp: Message = await conv_with_data.get_response(timeout=5)
+    assert "Произвести поиск лекарcтва по имени" in resp.raw_text
+    await resp.click(data=b'search_cat')
+    resp = await conv_with_data.get_response(timeout=5)
+    assert 'Введи имя категории.' in resp.raw_text
+    await conv_with_data.send_message('Вывих')
+    resp = await conv_with_data.get_response(timeout=5)
+    assert 'Было найдено 1 лекарств.' in resp.raw_text
+
+    await conv_with_data.send_message('/search')
+    resp: Message = await conv_with_data.get_response(timeout=5)
+    await resp.click(data=b'search_cat')
+    resp = await conv_with_data.get_response(timeout=5)
+    await conv_with_data.send_message('unexisting')
+    resp = await conv_with_data.get_response(timeout=5)
+    assert 'не было найдено.' in resp.raw_text
+
 
 @pytest.mark.anyio
-async def test_bot_add_new_med(conv_with_data):
-    #check incorrect date
-    #check incorrect quantity
-    pass
+async def test_bot_add_new_med_unique(conv_with_connection):
+    sleep(SLEEP_SEC)
+    await conv_with_connection.send_message('/add_med')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Давай добавим новое лекарство.' in resp.raw_text
+    await conv_with_connection.send_message('test_med_1')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Теперь введи количество лекарства' in resp.raw_text
+    await conv_with_connection.send_message('5')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Теперь введи местоположение лекарства' in resp.raw_text
+    await conv_with_connection.send_message('location')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Теперь введи от чего данное лекарство." in resp.raw_text
+    await conv_with_connection.send_message('ill')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Теперь введи срок годности лекарства." in resp.raw_text
+    await conv_with_connection.send_message('09/2022')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Лекарство добавлено успешно:" in resp.raw_text
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Текущее количество лекарств в твоей аптечке test_1 : 1' in resp.raw_text
+
+    await conv_with_connection.send_message('/add_med')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('test_med_2')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('5')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('location')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('ill')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('09/2022')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Лекарство добавлено успешно:" in resp.raw_text
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Текущее количество лекарств в твоей аптечке test_1 : 2' in resp.raw_text
+
+
+@pytest.mark.anyio
+async def test_bot_add_new_med_incorrect(conv_with_connection):
+    sleep(SLEEP_SEC)
+    await conv_with_connection.send_message('/add_med')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Давай добавим новое лекарство.' in resp.raw_text
+    await conv_with_connection.send_message('test_med_1')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Теперь введи количество лекарства' in resp.raw_text
+    await conv_with_connection.send_message('incorrect')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Некорректный формат количества. ' in resp.raw_text
+    await conv_with_connection.send_message('5')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Теперь введи местоположение лекарства' in resp.raw_text
+    await conv_with_connection.send_message('location')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Теперь введи от чего данное лекарство." in resp.raw_text
+    await conv_with_connection.send_message('ill')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Теперь введи срок годности лекарства." in resp.raw_text
+    await conv_with_connection.send_message('incorrect')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Некорректный формат даты.' in resp.raw_text
+    await conv_with_connection.send_message('09/2022')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Лекарство добавлено успешно:" in resp.raw_text
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Текущее количество лекарств в твоей аптечке test_1 : 1' in resp.raw_text
+
+
+@pytest.mark.anyio
+async def test_bot_add_new_med_copy(conv_with_connection):
+    sleep(SLEEP_SEC)
+    num_1 = 5
+    await conv_with_connection.send_message('/add_med')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('test_med_2')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message(str(num_1))
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('location')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('ill')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('09/2022')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Лекарство добавлено успешно:" in resp.raw_text
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Текущее количество лекарств в твоей аптечке test_1 : 1' in resp.raw_text
+
+    num_2 = 15
+    await conv_with_connection.send_message('/add_med')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('test_med_2')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message(str(num_2))
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('location')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('ill')
+    await conv_with_connection.get_response(timeout=5)
+    await conv_with_connection.send_message('09/2022')
+    await conv_with_connection.get_response(timeout=5)
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert "Лекарство добавлено успешно:" in resp.raw_text
+    assert str(num_2 + num_1) in resp.raw_text
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'Текущее количество лекарств в твоей аптечке test_1 : 1' in resp.raw_text
+
+
+@pytest.mark.anyio
+async def test_bot_list_med_empty(conv_with_connection):
+    sleep(SLEEP_SEC)
+    await conv_with_connection.send_message('/list_med')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'не содержит лекарств.' in resp.raw_text
+
+
+@pytest.mark.anyio
+async def test_bot_list_category_empty(conv_with_connection):
+    sleep(SLEEP_SEC)
+    await conv_with_connection.send_message('/list_med_category')
+    resp: Message = await conv_with_connection.get_response(timeout=5)
+    assert 'не содержит лекарств.' in resp.raw_text
+
 
 @pytest.mark.anyio
 async def test_bot_list_med(conv_with_data):
-    #check incorrect date
-    #check incorrect quantity
-    pass
+    sleep(SLEEP_SEC)
+    await conv_with_data.send_message('/list_med')
+    resp: Message = await conv_with_data.get_response(timeout=10)
+    assert 'содержит 59' in resp.raw_text
+    assert 'анвимакс' in resp.raw_text
+
+
+@pytest.mark.anyio
+async def test_bot_list_med(conv_with_data):
+    sleep(SLEEP_SEC)
+    await conv_with_data.send_message('/list_med_category')
+    resp: Message = await conv_with_data.get_response(timeout=10)
+    assert 'орви' in resp.raw_text
+
 
 @pytest.mark.anyio
 async def test_bot_take_med(conv_with_data):
-    #check incorrect date
-    #check incorrect quantity
+    # check incorrect date
+    # check incorrect quantity
     pass

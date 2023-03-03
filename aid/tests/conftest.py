@@ -10,9 +10,11 @@ import platform
 if platform.system() == 'Windows':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+
 @pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"
+
 
 # Your API ID, hash and session string here
 api_id = int(os.environ["TELEGRAM_APP_ID"])
@@ -20,6 +22,7 @@ api_hash = os.environ["TELEGRAM_APP_HASH"]
 
 session_str = os.environ["TELETHON_SESSION"]
 SLEEP_SEC = 4
+
 
 async def delete_cur_kit(conv, click=b'delete_yes'):
     sleep(SLEEP_SEC)
@@ -49,9 +52,10 @@ async def conv_with_connection():
     )
     await client.connect()
     async with client.conversation("@test_med_nika_bot") as conv:
-        await create_new_kit(conv, "test")
+        await create_new_kit(conv, "test_1")
         yield conv
         await delete_cur_kit(conv)
+
 
 @pytest.fixture(scope="function")
 async def conv_with_data():
@@ -61,10 +65,17 @@ async def conv_with_data():
     )
     await client.connect()
     async with client.conversation("@test_med_nika_bot") as conv:
-        await create_new_kit(conv, "test")
-        #import csv
+        await create_new_kit(conv, "test_data")
+        await conv.send_message("/import_csv")
+        await conv.get_response(timeout=5)
+        import_csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'input_example.csv')
+        await conv.send_file(import_csv_path)
+        await conv.get_response(timeout=5)
+        await conv.get_response(timeout=5)
         yield conv
         await delete_cur_kit(conv)
+
 
 @pytest.fixture(scope="function")
 async def empty_conv():

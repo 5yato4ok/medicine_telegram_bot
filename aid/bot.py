@@ -465,7 +465,7 @@ async def process_med_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             update.message.text, '%m/%Y')
     except Exception as e:
         logger.error(f"Incorrect format of date. Exception: {e}")
-        await send_message("❌ Некореектный формат даты. Пожалуйста предоставь дату в следующем формате: mm/yyyy",
+        await send_message("❌ Некорректный формат даты. Пожалуйста предоставь дату в следующем формате: mm/yyyy",
                            update.message.reply_text)
         return MED_DATE
 
